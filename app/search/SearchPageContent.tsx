@@ -41,34 +41,46 @@ interface Product {
 
 interface SearchResponse {
   products: Product[]
+  count: number
+  executionTime: number
 }
 
-// Mock API function (검색 API, id로 수정)
+// 실제 API 호출 함수
 const searchProducts = async (
-    query: string, 
-    sources: string[], 
-    minPrice: number, 
-    maxPrice: number
-  ): Promise<SearchResponse> => {
-    const response = await fetch('/api/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, sources, limit: 20 })
+  query: string, 
+  sources: string[], 
+  minPrice: number, 
+  maxPrice: number
+): Promise<SearchResponse> => {
+  const response = await fetch('/api/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query,
+      sources,
+      limit: 20
     })
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json()
+    throw new Error(errorData.error || '검색 중 오류가 발생했습니다.')
+  }
+
+  const data = await response.json()
   
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || '검색 중 오류가 발생했습니다.')
-    }
-  
-    const data = await response.json()
-    
-    // 가격 필터링
-    const filteredProducts = data.products.filter((product: Product) => 
-      product.price >= minPrice && product.price <= maxPrice
-    )
-  
-    return { ...data, products: filteredProducts, count: filteredProducts.length }
+  // 가격 필터링 (API에서 처리하지 않으므로 클라이언트에서 처리)
+  const filteredProducts = data.products.filter((product: Product) => 
+    product.price >= minPrice && product.price <= maxPrice
+  )
+
+  return {
+    ...data,
+    products: filteredProducts,
+    count: filteredProducts.length
+  }
 }
 
 export default function SearchPageContent() {
@@ -94,6 +106,7 @@ export default function SearchPageContent() {
   const [sortBy, setSortBy] = useState("price_asc")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false) // 검색 실행 여부 추가
 
   const tabs = [
     { id: "all", label: "전체", emoji: "🔍", value: null },
@@ -103,8 +116,15 @@ export default function SearchPageContent() {
   ]
 
   const doSearch = useCallback(async () => {
+    if (!searchQuery.trim()) {
+      setError("검색어를 입력해주세요.")
+      return
+    }
+
     setLoading(true)
     setError(null)
+    setHasSearched(true)
+    
     try {
       const result = await searchProducts(
         searchQuery,
@@ -115,7 +135,8 @@ export default function SearchPageContent() {
       setProducts(result.products)
       setSelectedIds([])
     } catch (e) {
-      setError("검색 중 오류가 발생했습니다."+e)
+      setError(e instanceof Error ? e.message : "검색 중 오류가 발생했습니다.")
+      setProducts([])
     } finally {
       setLoading(false)
     }
@@ -124,6 +145,7 @@ export default function SearchPageContent() {
   const handleSearch = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (searchQuery.trim()) {
+      // URL 업데이트 (뒤로가기 지원)
       router.push(`/search?q=${encodeURIComponent(searchQuery)}&location=${selectedLocation}`)
       doSearch()
     }
@@ -146,6 +168,13 @@ export default function SearchPageContent() {
     setSelectedSources(newSources)
   }, [])
 
+  // URL에서 쿼리가 있을 때만 자동 검색 (최초 로드 시)
+  useEffect(() => {
+    if (queryFromUrl && !hasSearched) {
+      doSearch()
+    }
+  }, [queryFromUrl, doSearch, hasSearched])
+
   // 필터링 및 정렬
   const tokens = keywordFilter.split(/[,\s]+/).filter(t => t)
   const includeKeys = tokens.filter(t => t.startsWith("+")).map(t => t.slice(1))
@@ -161,13 +190,6 @@ export default function SearchPageContent() {
   const sorted = [...filtered].sort((a, b) =>
     sortBy === "price_asc" ? a.price - b.price : b.price - a.price
   )
-
-  // useEffect 의존성 배열 최적화
-  useEffect(() => {
-    if (queryFromUrl) {
-      doSearch()
-    }
-  }, [queryFromUrl, doSearch])
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -206,22 +228,24 @@ export default function SearchPageContent() {
                     type="submit" 
                     size="icon" 
                     className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-brand-500 hover:bg-brand-600"
+                    disabled={loading}
                   >
-                    <Search className="h-4 w-4" />
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>
               <div className="md:col-span-2">
                 <Button
-                  onClick={doSearch}
-                  disabled={loading}
-                  className="w-full h-12 bg-brand-500 hover:bg-brand-600 rounded-xl"
+                  type="submit"
+                  disabled={loading || !searchQuery.trim()}
+                  className="w-full h-12 bg-brand-500 hover:bg-brand-600 rounded-xl disabled:opacity-50"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "검색"}
                 </Button>
               </div>
               <div className="md:col-span-2">
                 <Button
+                  type="button"
                   variant="outline"
                   onClick={() => setShowFilters(!showFilters)}
                   className="w-full h-12 border-brand-200 text-brand-500 hover:bg-brand-50 rounded-xl"
@@ -232,6 +256,17 @@ export default function SearchPageContent() {
               </div>
             </div>
           </form>
+
+          {/* 검색 전 안내 메시지 */}
+          {!hasSearched && !queryFromUrl && (
+            <div className="text-center py-8">
+              <div className="text-4xl mb-4">🔍</div>
+              <h3 className="text-xl font-semibold mb-2">검색어를 입력하고 엔터를 눌러주세요</h3>
+              <p className="text-gray-600">
+                당근마켓, 번개장터, 중고나라에서 상품을 찾아드립니다
+              </p>
+            </div>
+          )}
 
           {/* 비교 버튼 */}
           {selectedIds.length >= 2 && (
@@ -249,92 +284,97 @@ export default function SearchPageContent() {
       </div>
 
       <div className="container mx-auto max-w-6xl px-4 py-6">
-        {/* 플랫폼 탭 */}
-        <Card className="rounded-xl mb-6 border-brand-200">
-          <CardContent className="p-4">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-4">
-                {tabs.map((tab) => (
-                  <TabsTrigger
-                    key={tab.id}
-                    value={tab.id}
-                    className="data-[state=active]:bg-brand-100 data-[state=active]:text-brand-700"
-                  >
-                    <span className="mr-2">{tab.emoji}</span>
-                    {tab.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </CardContent>
-        </Card>
+        {/* 검색이 실행된 경우에만 탭과 필터 표시 */}
+        {hasSearched && (
+          <>
+            {/* 플랫폼 탭 */}
+            <Card className="rounded-xl mb-6 border-brand-200">
+              <CardContent className="p-4">
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                  <TabsList className="grid w-full grid-cols-4">
+                    {tabs.map((tab) => (
+                      <TabsTrigger
+                        key={tab.id}
+                        value={tab.id}
+                        className="data-[state=active]:bg-brand-100 data-[state=active]:text-brand-700"
+                      >
+                        <span className="mr-2">{tab.emoji}</span>
+                        {tab.label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </CardContent>
+            </Card>
 
-        {/* 필터 섹션 */}
-        {showFilters && (
-          <Card className="rounded-xl mb-6 border-brand-200">
-            <CardHeader>
-              <CardTitle className="text-brand-500">
-                🎛️ 세부 필터
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">검색 대상 플랫폼</label>
-                  <Select 
-                    value={selectedSources.join(',')} 
-                    onValueChange={handleSourcesChange}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="플랫폼 선택" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="danggeun">🥕 당근마켓</SelectItem>
-                      <SelectItem value="bunjang">⚡ 번개장터</SelectItem>
-                      <SelectItem value="junggonara">💼 중고나라</SelectItem>
-                      <SelectItem value="danggeun,bunjang,junggonara">모든 플랫폼</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">정렬 기준</label>
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="price_asc">💰 가격 낮은 순</SelectItem>
-                      <SelectItem value="price_desc">💎 가격 높은 순</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    💵 가격 범위: {formatPrice(priceRange[0])} - {formatPrice(priceRange[1])}
-                  </label>
-                  <Slider
-                    value={priceRange}
-                    onValueChange={setPriceRange}
-                    min={0}
-                    max={1000000}
-                    step={10000}
-                    className="mt-2"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">🔍 키워드 필터</label>
-                <Input
-                  placeholder="+포함할키워드, -제외할키워드 (쉼표로 구분)"
-                  value={keywordFilter}
-                  onChange={(e) => setKeywordFilter(e.target.value)}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  + 기호로 포함할 키워드, - 기호로 제외할 키워드를 지정하세요
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+            {/* 필터 섹션 */}
+            {showFilters && (
+              <Card className="rounded-xl mb-6 border-brand-200">
+                <CardHeader>
+                  <CardTitle className="text-brand-500">
+                    🎛️ 세부 필터
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">검색 대상 플랫폼</label>
+                      <Select 
+                        value={selectedSources.join(',')} 
+                        onValueChange={handleSourcesChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="플랫폼 선택" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="danggeun">🥕 당근마켓</SelectItem>
+                          <SelectItem value="bunjang">⚡ 번개장터</SelectItem>
+                          <SelectItem value="junggonara">💼 중고나라</SelectItem>
+                          <SelectItem value="danggeun,bunjang,junggonara">모든 플랫폼</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">정렬 기준</label>
+                      <Select value={sortBy} onValueChange={setSortBy}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="price_asc">💰 가격 낮은 순</SelectItem>
+                          <SelectItem value="price_desc">💎 가격 높은 순</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        💵 가격 범위: {formatPrice(priceRange[0])} - {formatPrice(priceRange[1])}
+                      </label>
+                      <Slider
+                        value={priceRange}
+                        onValueChange={setPriceRange}
+                        min={0}
+                        max={1000000}
+                        step={10000}
+                        className="mt-2"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">🔍 키워드 필터</label>
+                    <Input
+                      placeholder="+포함할키워드, -제외할키워드 (쉼표로 구분)"
+                      value={keywordFilter}
+                      onChange={(e) => setKeywordFilter(e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      + 기호로 포함할 키워드, - 기호로 제외할 키워드를 지정하세요
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
 
         {/* 검색 결과 */}
@@ -342,6 +382,7 @@ export default function SearchPageContent() {
           <div className="text-center py-12">
             <Loader2 className="w-12 h-12 animate-spin text-brand-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold">검색 중입니다...</h3>
+            <p className="text-gray-600 mt-2">잠시만 기다려주세요...</p>
           </div>
         ) : error ? (
           <Card className="rounded-xl border-red-200">
@@ -350,16 +391,16 @@ export default function SearchPageContent() {
               <p className="text-red-600">{error}</p>
             </CardContent>
           </Card>
-        ) : (
+        ) : hasSearched ? (
           <>
             {/* 검색 결과 헤더 */}
             {sorted.length > 0 && (
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold">
-                  📦 검색 결과 ({sorted.length}개)
+                📦 `{searchQuery}` 검색 결과 ({sorted.length}개)
                 </h2>
-                <p className="text-sm text-gray-600">
-                  {selectedLocation}에서 검색한 결과입니다
+                <p className="text-gray-600 mb-4">
+                `{searchQuery}` 에 대한 검색 결과를 찾을 수 없습니다.
                 </p>
               </div>
             )}
@@ -400,6 +441,11 @@ export default function SearchPageContent() {
                     <p className="text-xl font-bold text-brand-500">
                       {product.priceText}
                     </p>
+                    {product.location && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        📍 {product.location}
+                      </p>
+                    )}
                   </CardContent>
                   <CardFooter className="p-4 pt-0 space-x-2">
                     <Button 
@@ -438,22 +484,22 @@ export default function SearchPageContent() {
             </div>
 
             {/* 검색 결과 없음 */}
-            {sorted.length === 0 && !loading && (
-                <div className="text-center py-12">
-                    <div className="text-4xl mb-4">🔍</div>
-                    <h3 className="text-xl font-semibold mb-2">검색 결과가 없습니다</h3>
-                    <p className="text-gray-600 mb-4">
-                    `{searchQuery}` 에 대한 검색 결과를 찾을 수 없습니다.
-                    </p>
-                    <div className="text-sm text-gray-500">
-                    <p>• 다른 키워드로 검색해보세요</p>
-                    <p>• 검색어의 맞춤법을 확인해보세요</p>
-                    <p>• 더 간단한 키워드를 사용해보세요</p>
-                    </div>
+            {sorted.length === 0 && (
+              <div className="text-center py-12">
+                <div className="text-4xl mb-4">🔍</div>
+                <h3 className="text-xl font-semibold mb-2">검색 결과가 없습니다</h3>
+                <p className="text-gray-600 mb-4">
+                  `{searchQuery}` 에 대한 검색 결과를 찾을 수 없습니다.
+                </p>
+                <div className="text-sm text-gray-500">
+                  <p>• 다른 키워드로 검색해보세요</p>
+                  <p>• 검색어의 맞춤법을 확인해보세요</p>
+                  <p>• 더 간단한 키워드를 사용해보세요</p>
                 </div>
-                )}
+              </div>
+            )}
           </>
-        )}
+        ) : null}
       </div>
     </div>
   )

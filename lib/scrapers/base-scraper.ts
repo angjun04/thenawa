@@ -51,7 +51,8 @@ async function getBrowser(): Promise<Browser> {
         "--no-sandbox", 
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
-        "--disable-spdy"
+        "--disable-spdy",
+        "--disable-features=VizDisplayCompositor"
       ],
       headless: true,
     })
@@ -71,15 +72,32 @@ export abstract class BaseScraper {
     this.browser = await getBrowser()
     this.page = await this.browser.newPage()
     
-    await this.page.setViewport({ width: 1280, height: 800 })
+    // 모바일 뷰포트 설정
+    await this.page.setViewport({ 
+      width: 375, 
+      height: 812,
+      isMobile: true,
+      hasTouch: true,
+      deviceScaleFactor: 2
+    })
+    
+    // 모바일 User-Agent 설정
     await this.page.setUserAgent(
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ' +
-      'AppleWebKit/537.36 (KHTML, like Gecko) ' +
-      'Chrome/112.0.0.0 Safari/537.36'
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) ' +
+      'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 ' +
+      'Mobile/15E148 Safari/604.1'
     )
     
-    this.page.setDefaultTimeout(20000)
-    this.page.setDefaultNavigationTimeout(20000)
+    // 추가 헤더 설정
+    await this.page.setExtraHTTPHeaders({
+      'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    })
+    
+    this.page.setDefaultTimeout(30000)
+    this.page.setDefaultNavigationTimeout(30000)
   }
 
   async cleanup(): Promise<void> {
@@ -88,8 +106,7 @@ export abstract class BaseScraper {
         await this.page.close()
         this.page = null
       }
-    } catch (error) {
-        console.log(error)
+    } catch {
       this.page = null
     }
   }
@@ -111,6 +128,23 @@ export abstract class BaseScraper {
         }, 100)
       })
     })
+  }
+
+  // 모바일 터치 시뮬레이션
+  async mobileScroll(): Promise<void> {
+    if (!this.page) return
+    
+    const viewport = this.page.viewport()
+    if (!viewport) return
+
+    // 모바일 스크롤 시뮬레이션
+    for (let i = 0; i < 3; i++) {
+      await this.page.touchscreen.tap(viewport.width / 2, viewport.height / 2)
+      await this.page.evaluate(() => {
+        window.scrollBy(0, window.innerHeight * 0.8)
+      })
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
   }
 
   abstract searchProducts(query: string, limit?: number): Promise<Product[]>

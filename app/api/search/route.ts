@@ -5,6 +5,7 @@ import { JunggonaraScraper } from '@/lib/scrapers/junggonara-scraper'
 import { SearchRequest, SearchResponse, Product } from '@/types/product'
 
 export const dynamic = "force-dynamic"
+export const maxDuration = 60 // Vercel 최대 타임아웃
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -20,43 +21,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`검색 시작: "${query}", 플랫폼: ${sources.join(', ')}`)
+    console.log(`모바일 최적화 검색 시작: "${query}", 플랫폼: ${sources.join(', ')}`)
 
-    // 검색어 확장 (첫 번째 쿼리만 사용하여 빠른 응답)
-    const expandedQueries = [query] // 단순화
-    console.log('검색어:', expandedQueries)
-
-    // 병렬 스크래핑 실행
-    const scrapingTasks: Promise<Product[]>[] = []
+    // 순차 실행으로 안정성 향상 (모바일 환경에서는 병렬보다 안정적)
+    const products: Product[] = []
 
     if (sources.includes('danggeun')) {
-      const scraper = new DanggeunScraper()
-      scrapingTasks.push(scraper.searchProducts(query, Math.ceil(limit / sources.length)))
+      try {
+        console.log('당근마켓 검색 시작...')
+        const scraper = new DanggeunScraper()
+        const result = await scraper.searchProducts(query, Math.ceil(limit / sources.length))
+        products.push(...result)
+        console.log(`당근마켓 완료: ${result.length}개`)
+      } catch (error) {
+        console.error('당근마켓 검색 실패:', error)
+      }
     }
 
     if (sources.includes('bunjang')) {
-      const scraper = new BunjangScraper()
-      scrapingTasks.push(scraper.searchProducts(query, Math.ceil(limit / sources.length)))
+      try {
+        console.log('번개장터 검색 시작...')
+        const scraper = new BunjangScraper()
+        const result = await scraper.searchProducts(query, Math.ceil(limit / sources.length))
+        products.push(...result)
+        console.log(`번개장터 완료: ${result.length}개`)
+      } catch (error) {
+        console.error('번개장터 검색 실패:', error)
+      }
     }
 
     if (sources.includes('junggonara')) {
-      const scraper = new JunggonaraScraper()
-      scrapingTasks.push(scraper.searchProducts(query, Math.ceil(limit / sources.length)))
-    }
-
-    console.log(`${scrapingTasks.length}개 플랫폼에서 병렬 스크래핑 시작...`)
-
-    const results = await Promise.allSettled(scrapingTasks)
-    const products: Product[] = []
-
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        products.push(...result.value)
-        console.log(`플랫폼 ${index + 1} 완료: ${result.value.length}개 상품`)
-      } else {
-        console.error(`플랫폼 ${index + 1} 실패:`, result.reason)
+      try {
+        console.log('중고나라 검색 시작...')
+        const scraper = new JunggonaraScraper()
+        const result = await scraper.searchProducts(query, Math.ceil(limit / sources.length))
+        products.push(...result)
+        console.log(`중고나라 완료: ${result.length}개`)
+      } catch (error) {
+        console.error('중고나라 검색 실패:', error)
       }
-    })
+    }
 
     // 중복 제거 및 정렬
     const uniqueProducts = products.filter((product, index, self) => 
@@ -64,7 +68,7 @@ export async function POST(request: NextRequest) {
     ).sort((a, b) => a.price - b.price)
 
     const executionTime = Date.now() - startTime
-    console.log(`검색 완료: ${uniqueProducts.length}개 상품, ${executionTime}ms 소요`)
+    console.log(`모바일 검색 완료: ${uniqueProducts.length}개 상품, ${executionTime}ms 소요`)
 
     const response: SearchResponse = {
       query,
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response)
 
   } catch (error) {
-    console.error('검색 API 오류:', error)
+    console.error('모바일 검색 API 오류:', error)
     return NextResponse.json(
       { 
         error: '검색 중 오류가 발생했습니다.',
