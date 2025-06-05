@@ -45,47 +45,30 @@ interface SearchResponse {
 
 // Mock API function (검색 API, id로 수정)
 const searchProducts = async (
-  query: string, 
-  sources: string[], 
-  minPrice: number, 
-  maxPrice: number
-): Promise<SearchResponse> => {
-  // 실제 API 호출로 교체 예정
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // 파라미터들을 실제로 활용하는 로직 시뮬레이션
-      const filteredByPrice = [
-        {
-          id: "1",
-          title: `${query} - 상품 1`,
-          price: 850000,
-          priceText: "850,000원",
-          source: "danggeun",
-          imageUrl: "/api/placeholder/300/200",
-          productUrl: "https://example.com/1",
-          location: "용답동"
-        },
-        {
-          id: "2", 
-          title: `${query} - 상품 2`,
-          price: 920000,
-          priceText: "920,000원",
-          source: "bunjang",
-          imageUrl: "/api/placeholder/300/200",
-          productUrl: "https://example.com/2",
-          location: "성수동"
-        }
-      ].filter(product => 
-        sources.includes(product.source) &&
-        product.price >= minPrice && 
-        product.price <= maxPrice
-      )
-
-      resolve({
-        products: filteredByPrice
-      })
-    }, 1000)
-  })
+    query: string, 
+    sources: string[], 
+    minPrice: number, 
+    maxPrice: number
+  ): Promise<SearchResponse> => {
+    const response = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, sources, limit: 20 })
+    })
+  
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || '검색 중 오류가 발생했습니다.')
+    }
+  
+    const data = await response.json()
+    
+    // 가격 필터링
+    const filteredProducts = data.products.filter((product: Product) => 
+      product.price >= minPrice && product.price <= maxPrice
+    )
+  
+    return { ...data, products: filteredProducts, count: filteredProducts.length }
 }
 
 export default function SearchPageContent() {
