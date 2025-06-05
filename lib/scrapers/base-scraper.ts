@@ -130,20 +130,34 @@ export abstract class BaseScraper {
     })
   }
 
-  // 모바일 터치 시뮬레이션
+  // 🔥 핵심 수정: 터치 제거, 안전한 스크롤로 교체
   async mobileScroll(): Promise<void> {
     if (!this.page) return
     
-    const viewport = this.page.viewport()
-    if (!viewport) return
-
-    // 모바일 스크롤 시뮬레이션
-    for (let i = 0; i < 3; i++) {
-      await this.page.touchscreen.tap(viewport.width / 2, viewport.height / 2)
+    try {
+      // 터치 시뮬레이션 대신 안전한 JavaScript 스크롤 사용
       await this.page.evaluate(() => {
-        window.scrollBy(0, window.innerHeight * 0.8)
+        // 3번 스크롤, 각각 화면 높이의 80%씩
+        let scrollCount = 0
+        const maxScrolls = 3
+        
+        const scrollStep = () => {
+          if (scrollCount < maxScrolls) {
+            window.scrollBy(0, window.innerHeight * 0.8)
+            scrollCount++
+            setTimeout(scrollStep, 1000) // 1초 간격
+          }
+        }
+        
+        scrollStep()
       })
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // 스크롤 완료 대기 (3초 + 여유분)
+      await new Promise(resolve => setTimeout(resolve, 4000))
+      
+    } catch (error) {
+      console.warn(`${this.sourceName} 모바일 스크롤 실패:`, error)
+      // 스크롤 실패해도 계속 진행
     }
   }
 

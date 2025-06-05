@@ -123,10 +123,60 @@ export class BunjangScraper extends BaseScraper {
 
         const price = parseInt(priceText.replace(/[^0-9]/g, ''), 10) || 0
         
-        let imageUrl = card.find('img').attr('data-original') ||
-                      card.find('img').attr('data-src') ||
-                      card.find('img').attr('src') || ''
-        if (imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl
+        // 🔥 이미지 추출 로직 대폭 개선
+        let imageUrl = ''
+        const imgElement = card.find('img').first()
+        
+        if (imgElement.length) {
+          // 다양한 이미지 속성 확인 (우선순위 순)
+          const imageAttributes = [
+            'data-original',      // 번개장터 주요 속성
+            'data-src',           // lazy loading
+            'data-lazy',          // lazy loading
+            'data-lazy-src',      // lazy loading
+            'src',                // 기본 src
+            'data-image',         // 커스텀 속성
+            'data-url'            // 커스텀 속성
+          ]
+          
+          for (const attr of imageAttributes) {
+            const attrValue = imgElement.attr(attr)
+            if (attrValue && attrValue.trim() && attrValue !== 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7') {
+              imageUrl = attrValue.trim()
+              console.log(`번개장터 이미지 발견 (${attr}): ${imageUrl.substring(0, 50)}...`)
+              break
+            }
+          }
+          
+          // srcset도 확인
+          if (!imageUrl) {
+            const srcset = imgElement.attr('srcset')
+            if (srcset) {
+              const srcsetUrls = srcset.split(',').map(s => s.trim().split(' ')[0])
+              if (srcsetUrls.length > 0 && srcsetUrls[0]) {
+                imageUrl = srcsetUrls[0]
+                console.log(`번개장터 이미지 발견 (srcset): ${imageUrl.substring(0, 50)}...`)
+              }
+            }
+          }
+        }
+        
+        // 이미지 URL 정규화
+        if (imageUrl) {
+          if (imageUrl.startsWith('//')) {
+            imageUrl = 'https:' + imageUrl
+          } else if (imageUrl.startsWith('/')) {
+            imageUrl = this.baseUrl + imageUrl
+          }
+          
+          // 유효하지 않은 이미지 URL 필터링
+          if (imageUrl.includes('placeholder') || 
+              imageUrl.includes('loading') || 
+              imageUrl.includes('data:image/svg') ||
+              imageUrl.length < 10) {
+            imageUrl = ''
+          }
+        }
 
         const href = card.attr('href') || ''
         const productUrl = href.startsWith('http') ? href : this.baseUrl + href
@@ -137,11 +187,16 @@ export class BunjangScraper extends BaseScraper {
             title,
             price,
             priceText: priceText || '가격 문의',
-            imageUrl,
+            imageUrl: imageUrl || '', // 빈 문자열 대신 명시적으로 처리
             productUrl,
             source: 'bunjang',
             timestamp: new Date().toISOString(),
           })
+          
+          // 디버그 로그
+          if (!imageUrl) {
+            console.log(`번개장터 ${i}: 이미지 없음 - ${title.substring(0, 30)}...`)
+          }
         }
       })
 

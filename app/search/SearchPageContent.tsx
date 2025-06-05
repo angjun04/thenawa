@@ -407,80 +407,99 @@ export default function SearchPageContent() {
 
             {/* 상품 그리드 */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {sorted.map((product) => (
+            {sorted.map((product) => (
                 <Card
-                  key={product.id}
-                  className={`rounded-xl border-2 transition-all hover:scale-105 hover:shadow-lg ${
+                key={product.id}
+                className={`rounded-xl border-2 transition-all hover:scale-105 hover:shadow-lg ${
                     selectedIds.includes(product.id)
-                      ? 'border-brand-500 bg-brand-50'
-                      : 'border-gray-200 hover:border-brand-300'
-                  }`}
+                    ? 'border-brand-500 bg-brand-50'
+                    : 'border-gray-200 hover:border-brand-300'
+                }`}
                 >
-                  <div className="aspect-video bg-gray-100 rounded-t-xl overflow-hidden relative">
+                <div className="aspect-video bg-gray-100 rounded-t-xl overflow-hidden relative">
+                    {/* 🔥 이미지 오류 처리 개선 */}
+                    {product.imageUrl && product.imageUrl.trim() ? (
                     <Image 
-                      src={product.imageUrl} 
-                      alt={product.title}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        src={product.imageUrl} 
+                        alt={product.title}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        onError={(e) => {
+                        // 이미지 로드 실패 시 기본 이미지로 교체
+                        const target = e.target as HTMLImageElement
+                        target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMDAgODBDOTQuNDc3MiA4MCA5MCA4NC40NzcyIDkwIDkwVjExMEM5MCA5NC40NzcyIDg1LjUyMjggOTAgODAgOTBINzBDNjQuNDc3MiA5MCA2MCA5NC40NzcyIDYwIDEwMFYxMzBDNjAgMTM1LjUyMyA2NC40NzcyIDE0MCA3MCAxNDBIMTMwQzEzNS41MjMgMTQwIDE0MCAxMzUuNTIzIDE0MCAxMzBWMTAwQzE0MCA5NC40NzcyIDEzNS41MjMgOTAgMTMwIDkwSDEyMEMxMTQuNDc3IDkwIDExMCA5NC40NzcyIDExMCAxMDBWMTEwQzExMCAxMDQuNDc3IDEwNS41MjMgMTAwIDEwMCAxMDBaIiBmaWxsPSIjOUNBM0FGIi8+Cjx0ZXh0IHg9IjEwMCIgeT0iMTYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOUNBM0FGIiBmb250LXNpemU9IjEyIiBmb250LWZhbWlseT0iQXJpYWwiPuydtOuvuOyngDwvdGV4dD4KPC9zdmc+'
+                        }}
+                        priority={false}
                     />
-                  </div>
-                  <CardContent className="p-4">
+                    ) : (
+                    // 이미지가 없을 때 기본 플레이스홀더
+                    <div className="w-full h-full flex items-center justify-center bg-gray-200">
+                        <div className="text-center text-gray-400">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21 19V5C21 3.9 20.1 3 19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19ZM8.5 13.5L11 16.51L14.5 12L19 18H5L8.5 13.5Z" fill="currentColor"/>
+                        </svg>
+                        <p className="text-xs mt-1">이미지 없음</p>
+                        </div>
+                    </div>
+                    )}
+                </div>
+                <CardContent className="p-4">
                     <Badge 
-                      className="mb-2"
-                      style={{ 
+                    className="mb-2"
+                    style={{ 
                         backgroundColor: getSourceColor(product.source),
                         color: '#fff'
-                      }}
+                    }}
                     >
-                      {getSourceName(product.source)}
+                    {getSourceName(product.source)}
                     </Badge>
                     <h3 className="font-semibold mb-2 line-clamp-2">
-                      {product.title}
+                    {product.title}
                     </h3>
                     <p className="text-xl font-bold text-brand-500">
-                      {product.priceText}
+                    {product.priceText}
                     </p>
                     {product.location && (
-                      <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-sm text-gray-600 mt-1">
                         📍 {product.location}
-                      </p>
+                    </p>
                     )}
-                  </CardContent>
-                  <CardFooter className="p-4 pt-0 space-x-2">
+                </CardContent>
+                <CardFooter className="p-4 pt-0 space-x-2">
                     <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => window.open(product.productUrl)}
-                      className="text-brand-500 border-brand-200 hover:bg-brand-50"
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => window.open(product.productUrl)}
+                    className="text-brand-500 border-brand-200 hover:bg-brand-50"
                     >
-                      <Eye className="w-3 h-3 mr-1" />
-                      보기
+                    <Eye className="w-3 h-3 mr-1" />
+                    보기
                     </Button>
                     <Button
-                      size="sm"
-                      variant={selectedIds.includes(product.id) ? "default" : "outline"}
-                      onClick={() => toggleSelect(product.id)}
-                      className={
+                    size="sm"
+                    variant={selectedIds.includes(product.id) ? "default" : "outline"}
+                    onClick={() => toggleSelect(product.id)}
+                    className={
                         selectedIds.includes(product.id)
-                          ? "bg-brand-500 hover:bg-brand-600"
-                          : "text-brand-500 border-brand-200 hover:bg-brand-50"
-                      }
+                        ? "bg-brand-500 hover:bg-brand-600"
+                        : "text-brand-500 border-brand-200 hover:bg-brand-50"
+                    }
                     >
-                      <Plus className="w-3 h-3 mr-1" />
-                      {selectedIds.includes(product.id) ? "선택됨" : "선택"}
+                    <Plus className="w-3 h-3 mr-1" />
+                    {selectedIds.includes(product.id) ? "선택됨" : "선택"}
                     </Button>
                     <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => router.push(`/product/${product.id}`)}
-                      className="text-brand-500 border-brand-200 hover:bg-brand-50"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => router.push(`/product/${product.id}`)}
+                    className="text-brand-500 border-brand-200 hover:bg-brand-50"
                     >
-                      상세
+                    상세
                     </Button>
-                  </CardFooter>
+                </CardFooter>
                 </Card>
-              ))}
+            ))}
             </div>
 
             {/* 검색 결과 없음 */}
