@@ -60,23 +60,9 @@ export class DanggeunScraper extends BaseScraper {
       
     } catch (error) {
       console.error('당근마켓 스크래핑 오류:', error)
-      return this.getMockProducts(query, limit)
+      return [] // Mock 데이터 제거
     } finally {
       await this.cleanup()
     }
-  }
-
-  private getMockProducts(query: string, limit: number): Product[] {
-    return Array.from({ length: Math.min(limit, 3) }, (_, i) => ({
-      id: `danggeun_mock_${Date.now()}_${i}`,
-      title: `${query} - 당근마켓 상품 ${i + 1}`,
-      price: Math.floor(Math.random() * 500000) + 100000,
-      priceText: new Intl.NumberFormat('ko-KR').format(Math.floor(Math.random() * 500000) + 100000) + '원',
-      source: 'danggeun' as const,
-      imageUrl: '/api/placeholder/300/200',
-      productUrl: `https://www.daangn.com/mock/${i}`,
-      location: '서울시',
-      timestamp: new Date().toISOString()
-    }))
   }
 }

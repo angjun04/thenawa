@@ -11,28 +11,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Mock 비교 결과 (AI 없이 간단한 규칙 기반)
-    const products = productIds.map((id: string, index: number) => ({
-      id,
-      valueRating: index === 0 ? 8.5 : 7.2,
-      pros: index === 0 ? ["저렴한 가격", "양호한 상태"] : ["큰 용량", "최신 상태"],
-      cons: index === 0 ? ["상대적으로 작은 용량"] : ["높은 가격"]
-    }))
-
-    const analysis = {
-      comparison: {
-        "가격": "첫 번째 제품이 더 저렴합니다",
-        "상태": "두 제품 모두 양호한 상태입니다",
-        "용량": "두 번째 제품이 더 큰 용량을 제공합니다"
-      },
-      products,
-      bestValue: {
-        reason: "첫 번째 제품이 가격 대비 성능이 우수합니다"
-      },
-      recommendations: "용량이 중요하다면 두 번째 제품을, 가격이 중요하다면 첫 번째 제품을 추천합니다"
-    }
-
-    return NextResponse.json({ analysis })
+    // 실제 제품 데이터가 없으므로 에러 반환
+    return NextResponse.json(
+      { error: '비교 기능은 현재 개발 중입니다.' },
+      { status: 501 }
+    )
 
   } catch (error) {
     console.error('비교 API 오류:', error)

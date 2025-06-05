@@ -439,14 +439,19 @@ export default function SearchPageContent() {
 
             {/* 검색 결과 없음 */}
             {sorted.length === 0 && !loading && (
-              <div className="text-center py-12">
-                <div className="text-4xl mb-4">🔍</div>
-                <h3 className="text-xl font-semibold mb-2">검색 결과가 없습니다</h3>
-                <p className="text-gray-600">
-                  다른 키워드로 검색해보거나 필터를 조정해보세요
-                </p>
-              </div>
-            )}
+                <div className="text-center py-12">
+                    <div className="text-4xl mb-4">🔍</div>
+                    <h3 className="text-xl font-semibold mb-2">검색 결과가 없습니다</h3>
+                    <p className="text-gray-600 mb-4">
+                    `{searchQuery}` 에 대한 검색 결과를 찾을 수 없습니다.
+                    </p>
+                    <div className="text-sm text-gray-500">
+                    <p>• 다른 키워드로 검색해보세요</p>
+                    <p>• 검색어의 맞춤법을 확인해보세요</p>
+                    <p>• 더 간단한 키워드를 사용해보세요</p>
+                    </div>
+                </div>
+                )}
           </>
         )}
       </div>
