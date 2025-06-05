@@ -6,13 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { 
-  Search,
-  Smartphone,
-  Laptop,
-  Gamepad2,
-  Home,
-  Car,
-  Shirt
+  Search
 } from "lucide-react"
 
 export default function HomePage() {
@@ -25,19 +19,6 @@ export default function HomePage() {
       router.push(`/search?q=${encodeURIComponent(searchQuery)}&location=용답동`)
     }
   }
-
-  const handleCategorySearch = (category: string) => {
-    router.push(`/search?q=${encodeURIComponent(category)}&location=용답동`)
-  }
-
-  const popularCategories = [
-    { icon: <Smartphone className="w-6 h-6" />, name: "스마트폰", search: "아이폰" },
-    { icon: <Laptop className="w-6 h-6" />, name: "노트북", search: "노트북" },
-    { icon: <Gamepad2 className="w-6 h-6" />, name: "게임", search: "게임기" },
-    { icon: <Home className="w-6 h-6" />, name: "가전제품", search: "가전" },
-    { icon: <Car className="w-6 h-6" />, name: "자동차", search: "자동차" },
-    { icon: <Shirt className="w-6 h-6" />, name: "의류", search: "옷" }
-  ]
 
   return (
     <div className="bg-gradient-to-br from-blue-50 via-white to-orange-50 min-h-screen">
@@ -80,7 +61,7 @@ export default function HomePage() {
             </p>
 
             {/* 검색 바 */}
-            <form onSubmit={handleSearch} className="mb-8">
+            <form onSubmit={handleSearch} className="mb-12">
               <div className="relative max-w-2xl mx-auto">
                 <Input
                   placeholder="찾고 있는 상품을 검색해보세요 (예: 아이폰 14, 갤럭시, 맥북)"
@@ -97,21 +78,6 @@ export default function HomePage() {
                 </Button>
               </div>
             </form>
-
-            {/* 인기 카테고리 */}
-            <div className="flex flex-wrap justify-center gap-3 mb-12">
-              {popularCategories.map((category, index) => (
-                <Button
-                  key={index}
-                  variant="outline"
-                  onClick={() => handleCategorySearch(category.search)}
-                  className="flex items-center gap-2 rounded-full border-gray-200 hover:border-brand-300 hover:bg-brand-50"
-                >
-                  {category.icon}
-                  {category.name}
-                </Button>
-              ))}
-            </div>
 
             {/* 통계 */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-3xl mx-auto">
