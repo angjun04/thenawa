@@ -23,7 +23,11 @@ import {
   ArrowUpDown,
   Eye,
   Plus,
-  Loader2
+  Loader2,
+  Sparkles,
+  Brain,
+  Zap,
+  Star
 } from "lucide-react"
 import { formatPrice, getSourceName, getSourceColor } from "@/lib/utils"
 
@@ -43,6 +47,15 @@ interface SearchResponse {
   products: Product[]
   count: number
   executionTime: number
+}
+
+// 🤖 AI 추천 응답 타입
+interface AIRecommendResponse {
+  success: boolean
+  recommendedIds: string[]
+  reasoning?: string
+  executionTime: number
+  error?: string
 }
 
 // 실제 API 호출 함수
@@ -83,6 +96,23 @@ const searchProducts = async (
   }
 }
 
+// 🤖 AI 추천 API 호출 함수
+const getAIRecommendations = async (query: string, products: Product[]): Promise<AIRecommendResponse> => {
+  const response = await fetch('/api/ai-recommend', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query,
+      products
+    })
+  })
+
+  const data = await response.json()
+  return data
+}
+
 export default function SearchPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -108,12 +138,45 @@ export default function SearchPageContent() {
   const [showFilters, setShowFilters] = useState(false)
   const [hasSearched, setHasSearched] = useState(false) // 검색 실행 여부 추가
 
+  // 🤖 AI 추천 관련 상태
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiRecommendedIds, setAiRecommendedIds] = useState<string[]>([])
+  const [aiReasoning, setAiReasoning] = useState<string>("")
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [showAIRecommendations, setShowAIRecommendations] = useState(true)
+
   const tabs = [
     { id: "all", label: "전체", emoji: "🔍", value: null },
     { id: "danggeun", label: "당근마켓", emoji: "🥕", value: "danggeun" },
     { id: "bunjang", label: "번개장터", emoji: "⚡", value: "bunjang" },
     { id: "junggonara", label: "중고나라", emoji: "💼", value: "junggonara" },
   ]
+
+  // 🤖 AI 추천 실행 함수
+  const getAIRecommendationsForProducts = useCallback(async (products: Product[]) => {
+    if (products.length === 0 || !searchQuery.trim()) return
+
+    setAiLoading(true)
+    setAiError(null)
+    
+    try {
+      console.log('🤖 AI 추천 요청 시작... (gemini-2.0-flash-lite)')
+      const result = await getAIRecommendations(searchQuery, products)
+      
+      if (result.success) {
+        setAiRecommendedIds(result.recommendedIds)
+        setAiReasoning(result.reasoning || '')
+        console.log(`🤖 AI 추천 완료: ${result.recommendedIds.length}개 상품`)
+      } else {
+        setAiError(result.error || 'AI 추천을 가져올 수 없습니다.')
+      }
+    } catch (error) {
+      console.error('AI 추천 오류:', error)
+      setAiError('AI 추천 중 오류가 발생했습니다.')
+    } finally {
+      setAiLoading(false)
+    }
+  }, [searchQuery])
 
   const doSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
@@ -125,6 +188,11 @@ export default function SearchPageContent() {
     setError(null)
     setHasSearched(true)
     
+    // 🤖 AI 추천 상태 초기화
+    setAiRecommendedIds([])
+    setAiReasoning("")
+    setAiError(null)
+    
     try {
       const result = await searchProducts(
         searchQuery,
@@ -134,13 +202,20 @@ export default function SearchPageContent() {
       )
       setProducts(result.products)
       setSelectedIds([])
+
+      // 🤖 검색 완료 후 자동으로 AI 추천 실행
+      if (result.products.length > 0) {
+        setTimeout(() => {
+          getAIRecommendationsForProducts(result.products)
+        }, 500) // 0.5초 후 AI 추천 시작
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "검색 중 오류가 발생했습니다.")
       setProducts([])
     } finally {
       setLoading(false)
     }
-  }, [searchQuery, selectedSources, priceRange])
+  }, [searchQuery, selectedSources, priceRange, getAIRecommendationsForProducts])
 
   const handleSearch = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -190,6 +265,11 @@ export default function SearchPageContent() {
   const sorted = [...filtered].sort((a, b) =>
     sortBy === "price_asc" ? a.price - b.price : b.price - a.price
   )
+
+  // 🤖 AI 추천 상품 여부 확인 함수
+  const isAIRecommended = useCallback((productId: string): boolean => {
+    return aiRecommendedIds.includes(productId)
+  }, [aiRecommendedIds])
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -287,6 +367,59 @@ export default function SearchPageContent() {
         {/* 검색이 실행된 경우에만 탭과 필터 표시 */}
         {hasSearched && (
           <>
+            {/* 🤖 AI 추천 상태 표시 */}
+            {(aiLoading || aiRecommendedIds.length > 0 || aiError) && (
+              <Card className="rounded-xl mb-6 border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-amber-700 flex items-center gap-2">
+                      <Sparkles className="w-5 h-5" />
+                      AI 추천 상품
+                    </CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAIRecommendations(!showAIRecommendations)}
+                      className="text-amber-600 hover:text-amber-700"
+                    >
+                      {showAIRecommendations ? "숨기기" : "보기"}
+                    </Button>
+                  </div>
+                </CardHeader>
+                {showAIRecommendations && (
+                  <CardContent>
+                    {aiLoading ? (
+                      <div className="flex items-center gap-3 text-amber-600">
+                        <Brain className="w-5 h-5 animate-pulse" />
+                        <span>AI가 상품을 분석 중입니다...</span>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      </div>
+                    ) : aiError ? (
+                      <div className="text-red-600 flex items-center gap-2">
+                        <span>⚠️</span>
+                        <span>{aiError}</span>
+                      </div>
+                    ) : aiRecommendedIds.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-amber-700">
+                          <Zap className="w-4 h-4" />
+                          <span className="font-medium">{aiRecommendedIds.length}개 상품을 AI가 추천했습니다!</span>
+                        </div>
+                        {aiReasoning && (
+                          <p className="text-sm text-amber-600 bg-amber-100 p-3 rounded-lg">
+                            💡 {aiReasoning}
+                          </p>
+                        )}
+                        <p className="text-xs text-amber-600">
+                          ✨ 황금색 테두리로 표시된 상품들이 AI 추천 상품입니다
+                        </p>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                )}
+              </Card>
+            )}
+
             {/* 플랫폼 탭 */}
             <Card className="rounded-xl mb-6 border-brand-200">
               <CardContent className="p-4">
@@ -397,109 +530,131 @@ export default function SearchPageContent() {
             {sorted.length > 0 && (
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold">
-                📦 `{searchQuery}` 검색 결과 ({sorted.length}개)
+                  📦 `{searchQuery}` 검색 결과 ({sorted.length}개)
                 </h2>
-                <p className="text-gray-600 mb-4">
-                `{searchQuery}` 에 대한 검색 결과를 찾을 수 없습니다.
-                </p>
               </div>
             )}
 
             {/* 상품 그리드 */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sorted.map((product) => (
-                <Card
-                key={product.id}
-                className={`rounded-xl border-2 transition-all hover:scale-105 hover:shadow-lg ${
-                    selectedIds.includes(product.id)
-                    ? 'border-brand-500 bg-brand-50'
-                    : 'border-gray-200 hover:border-brand-300'
-                }`}
-                >
-                <div className="aspect-video bg-gray-100 rounded-t-xl overflow-hidden relative">
-                    {/* 🔥 이미지 오류 처리 개선 */}
-                    {product.imageUrl && product.imageUrl.trim() ? (
-                    <Image 
-                        src={product.imageUrl} 
-                        alt={product.title}
-                        fill
-                        className="object-cover"
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                        onError={(e) => {
-                        // 이미지 로드 실패 시 기본 이미지로 교체
-                        const target = e.target as HTMLImageElement
-                        target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMDAgODBDOTQuNDc3MiA4MCA5MCA4NC40NzcyIDkwIDkwVjExMEM5MCA5NC40NzcyIDg1LjUyMjggOTAgODAgOTBINzBDNjQuNDc3MiA5MCA2MCA5NC40NzcyIDYwIDEwMFYxMzBDNjAgMTM1LjUyMyA2NC40NzcyIDE0MCA3MCAxNDBIMTMwQzEzNS41MjMgMTQwIDE0MCAxMzUuNTIzIDE0MCAxMzBWMTAwQzE0MCA5NC40NzcyIDEzNS41MjMgOTAgMTMwIDkwSDEyMEMxMTQuNDc3IDkwIDExMCA5NC40NzcyIDExMCAxMDBWMTEwQzExMCAxMDQuNDc3IDEwNS41MjMgMTAwIDEwMCAxMDBaIiBmaWxsPSIjOUNBM0FGIi8+Cjx0ZXh0IHg9IjEwMCIgeT0iMTYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOUNBM0FGIiBmb250LXNpemU9IjEyIiBmb250LWZhbWlseT0iQXJpYWwiPuydtOuvuOyngDwvdGV4dD4KPC9zdmc+'
-                        }}
-                        priority={false}
-                    />
-                    ) : (
-                    // 이미지가 없을 때 기본 플레이스홀더
-                    <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                        <div className="text-center text-gray-400">
-                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M21 19V5C21 3.9 20.1 3 19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19ZM8.5 13.5L11 16.51L14.5 12L19 18H5L8.5 13.5Z" fill="currentColor"/>
-                        </svg>
-                        <p className="text-xs mt-1">이미지 없음</p>
+              {sorted.map((product) => {
+                const isRecommended = isAIRecommended(product.id)
+                return (
+                  <Card
+                    key={product.id}
+                    className={`rounded-xl border-2 transition-all hover:scale-105 hover:shadow-lg relative ${
+                      isRecommended
+                        ? 'border-amber-400 bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100 shadow-amber-200 shadow-lg ring-2 ring-amber-200'
+                        : selectedIds.includes(product.id)
+                        ? 'border-brand-500 bg-brand-50'
+                        : 'border-gray-200 hover:border-brand-300'
+                    }`}
+                  >
+                    {/* 🤖 AI 추천 배지 */}
+                    {isRecommended && (
+                      <div className="absolute top-3 left-3 z-10">
+                        <Badge className="bg-amber-500 text-white shadow-lg border-amber-600 flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-white" />
+                          AI 추천
+                        </Badge>
+                      </div>
+                    )}
+
+                    <div className="aspect-video bg-gray-100 rounded-t-xl overflow-hidden relative">
+                      {/* 🔥 이미지 오류 처리 개선 */}
+                      {product.imageUrl && product.imageUrl.trim() ? (
+                        <Image 
+                          src={product.imageUrl} 
+                          alt={product.title}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          onError={(e) => {
+                            // 이미지 로드 실패 시 기본 이미지로 교체
+                            const target = e.target as HTMLImageElement
+                            target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMDAgODBDOTQuNDc3MiA4MCA5MCA4NC40NzcyIDkwIDkwVjExMEM5MCA5NC40NzcyIDg1LjUyMjggOTAgODAgOTBINzBDNjQuNDc3MiA5MCA2MCA5NC40NzcyIDYwIDEwMFYxMzBDNjAgMTM1LjUyMyA2NC40NzcyIDE0MCA3MCAxNDBIMTMwQzEzNS41MjMgMTQwIDE0MCAxMzUuNTIzIDE0MCAxMzBWMTAwQzE0MCA5NC40NzcyIDEzNS41MjMgOTAgMTMwIDkwSDEyMEMxMTQuNDc3IDkwIDExMCA5NC40NzcyIDExMCAxMDBWMTEwQzExMCAxMDQuNDc3IDEwNS41MjMgMTAwIDEwMCAxMDBaIiBmaWxsPSIjOUNBM0FGIi8+Cjx0ZXh0IHg9IjEwMCIgeT0iMTYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOUNBM0FGIiBmb250LXNpemU9IjEyIiBmb250LWZhbWlseT0iQXJpYWwiPuydtOuvuOyngDwvdGV4dD4KPC9zdmc+'
+                          }}
+                          priority={false}
+                        />
+                      ) : (
+                        // 이미지가 없을 때 기본 플레이스홀더
+                        <div className="w-full h-full flex items-center justify-center bg-gray-200">
+                          <div className="text-center text-gray-400">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M21 19V5C21 3.9 20.1 3 19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19ZM8.5 13.5L11 16.51L14.5 12L19 18H5L8.5 13.5Z" fill="currentColor"/>
+                            </svg>
+                            <p className="text-xs mt-1">이미지 없음</p>
+                          </div>
                         </div>
+                      )}
                     </div>
-                    )}
-                </div>
-                <CardContent className="p-4">
-                    <Badge 
-                    className="mb-2"
-                    style={{ 
-                        backgroundColor: getSourceColor(product.source),
-                        color: '#fff'
-                    }}
-                    >
-                    {getSourceName(product.source)}
-                    </Badge>
-                    <h3 className="font-semibold mb-2 line-clamp-2">
-                    {product.title}
-                    </h3>
-                    <p className="text-xl font-bold text-brand-500">
-                    {product.priceText}
-                    </p>
-                    {product.location && (
-                    <p className="text-sm text-gray-600 mt-1">
-                        📍 {product.location}
-                    </p>
-                    )}
-                </CardContent>
-                <CardFooter className="p-4 pt-0 space-x-2">
-                    <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => window.open(product.productUrl)}
-                    className="text-brand-500 border-brand-200 hover:bg-brand-50"
-                    >
-                    <Eye className="w-3 h-3 mr-1" />
-                    보기
-                    </Button>
-                    <Button
-                    size="sm"
-                    variant={selectedIds.includes(product.id) ? "default" : "outline"}
-                    onClick={() => toggleSelect(product.id)}
-                    className={
-                        selectedIds.includes(product.id)
-                        ? "bg-brand-500 hover:bg-brand-600"
-                        : "text-brand-500 border-brand-200 hover:bg-brand-50"
-                    }
-                    >
-                    <Plus className="w-3 h-3 mr-1" />
-                    {selectedIds.includes(product.id) ? "선택됨" : "선택"}
-                    </Button>
-                    <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => router.push(`/product/${product.id}`)}
-                    className="text-brand-500 border-brand-200 hover:bg-brand-50"
-                    >
-                    상세
-                    </Button>
-                </CardFooter>
-                </Card>
-            ))}
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Badge 
+                          className="mb-2"
+                          style={{ 
+                            backgroundColor: getSourceColor(product.source),
+                            color: '#fff'
+                          }}
+                        >
+                          {getSourceName(product.source)}
+                        </Badge>
+                        {/* 🤖 AI 추천 아이콘 */}
+                        {isRecommended && (
+                          <div className="text-amber-500">
+                            <Sparkles className="w-4 h-4" />
+                          </div>
+                        )}
+                      </div>
+                      <h3 className="font-semibold mb-2 line-clamp-2">
+                        {product.title}
+                      </h3>
+                      <p className={`text-xl font-bold ${isRecommended ? 'text-amber-600' : 'text-brand-500'}`}>
+                        {product.priceText}
+                      </p>
+                      {product.location && (
+                        <p className="text-sm text-gray-600 mt-1">
+                          📍 {product.location}
+                        </p>
+                      )}
+                    </CardContent>
+                    <CardFooter className="p-4 pt-0 space-x-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => window.open(product.productUrl)}
+                        className={`${isRecommended ? 'text-amber-600 border-amber-300 hover:bg-amber-50' : 'text-brand-500 border-brand-200 hover:bg-brand-50'}`}
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        보기
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={selectedIds.includes(product.id) ? "default" : "outline"}
+                        onClick={() => toggleSelect(product.id)}
+                        className={
+                          selectedIds.includes(product.id)
+                            ? "bg-brand-500 hover:bg-brand-600"
+                            : isRecommended
+                            ? "text-amber-600 border-amber-300 hover:bg-amber-50"
+                            : "text-brand-500 border-brand-200 hover:bg-brand-50"
+                        }
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        {selectedIds.includes(product.id) ? "선택됨" : "선택"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => router.push(`/product/${product.id}`)}
+                        className={`${isRecommended ? 'text-amber-600 border-amber-300 hover:bg-amber-50' : 'text-brand-500 border-brand-200 hover:bg-brand-50'}`}
+                      >
+                        상세
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                )
+              })}
             </div>
 
             {/* 검색 결과 없음 */}
