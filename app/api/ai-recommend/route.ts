@@ -73,37 +73,36 @@ export async function POST(request: NextRequest) {
 
     console.log(`🤖 AI 추천 시작: "${query}", ${products.length}개 상품 분석 (Qwen3 8B)`);
 
-    // 🔥 상품 데이터 요약 (토큰 절약)
-    const productSummary = products
-      .map(
-        (product, index) => `${index}: ${product.title} - ${product.priceText} (${product.source})`
-      )
-      .join("\n");
+    // 🔥 상품 요약 (성능 최적화)
+    const maxProducts = Math.min(products.length, 20);
+    const selectedProducts = products.slice(0, maxProducts);
 
     // 🔥 최적화된 프롬프트 (단일 최고 상품 추천)
-    const prompt = `You are a product recommendation expert for Korean secondhand marketplaces.
+    const prompt = `당신은 한국 중고거래 전문가입니다. 다음 검색어에 대한 상품들을 분석하고 최고의 상품을 추천해주세요.
 
-Search Query: "${query}"
+검색어: "${query}"
 
-Product List:
-${productSummary}
+상품 목록:
+${selectedProducts
+  .map(
+    (product, index) =>
+      `${index}. ${product.title} - ${product.priceText} (출처: ${product.source})`
+  )
+  .join("\n")}
 
-Select the BEST 1 product based on:
-1. Relevance to search query (most important)
-2. Price-value ratio
-3. Product condition and reliability
-4. Overall satisfaction potential
+다음 기준으로 가장 좋은 상품 1개를 선택해주세요:
+1. 검색어와의 관련성
+2. 가격 대비 가치
+3. 상품 상태 및 신뢰도
+4. 전체적인 만족도 예상
 
-Respond ONLY in JSON format:
+응답은 반드시 다음 JSON 형식으로 해주세요:
 {
-  "recommendedIndices": [2],
-  "reasoning": "Specific reason why this product is the best choice"
+  "recommendedIndices": [선택한 상품의 인덱스 번호],
+  "reasoning": "한국어로 추천 이유를 설명해주세요"
 }
 
-Important: 
-- Array must contain exactly 1 index
-- Index is the product number from the list above (starting from 0)
-- Select only the most perfect product`;
+중요: reasoning은 반드시 한국어로 작성해주세요.`;
 
     // 🔥 OpenRouter API 호출
     console.log(`🚀 Making OpenRouter request to: https://openrouter.ai/api/v1/chat/completions`);

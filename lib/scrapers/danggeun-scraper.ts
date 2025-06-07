@@ -2,10 +2,11 @@ import { BaseScraper } from "./base-scraper";
 import type { Product } from "@/types/product";
 import * as cheerio from "cheerio";
 import { browserManager } from "../browser-manager";
+import type { Page } from "puppeteer";
 
-async function autoScroll(page: any) {
+async function autoScroll(page: Page) {
   await page.evaluate(async () => {
-    await new Promise((resolve: any) => {
+    await new Promise<void>((resolve) => {
       let total = 0;
       const distance = 100;
       const timer = setInterval(() => {

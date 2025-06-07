@@ -46,6 +46,7 @@ export class JunggonaraScraper extends BaseScraper {
         ".product-list-item",
       ];
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let productElements: cheerio.Cheerio<any> | null = null;
       let usedSelector = "";
 
@@ -74,7 +75,7 @@ export class JunggonaraScraper extends BaseScraper {
           const $element = $(element);
 
           // 🔍 제목 추출
-          let title =
+          const title =
             $element.find('[data-testid="product-title"]').text().trim() ||
             $element.find("h3, h4, h5").text().trim() ||
             $element.find(".product-title").text().trim() ||
@@ -163,7 +164,7 @@ export class JunggonaraScraper extends BaseScraper {
           }
 
           // 🔍 위치 정보 추출
-          let location =
+          const location =
             $element.find('[data-testid="product-location"]').text().trim() ||
             $element.find(".product-location").text().trim() ||
             $element.find('[class*="region"]').text().trim() ||
