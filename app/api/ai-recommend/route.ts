@@ -21,18 +21,23 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    // 🔑 API Key 확인
+    // 🔑 API Key 체크 및 디버깅
     const apiKey = process.env.OPENROUTER_API_KEY;
-    console.log(`🔑 API Key loaded: ${apiKey ? "YES" : "NO"}`);
-    console.log(`🔑 API Key starts with: ${apiKey ? apiKey.substring(0, 10) + "..." : "NONE"}`);
+    const hasApiKey = !!apiKey;
+    console.log(`🔑 API Key loaded: ${hasApiKey ? "YES" : "NO"}`);
+    console.log(`🔑 API Key starts with: ${apiKey?.substring(0, 12)}...`);
+    console.log(`🔑 API Key length: ${apiKey?.length}`);
+    console.log(
+      `🔑 Full environment keys:`,
+      Object.keys(process.env).filter((k) => k.includes("OPENROUTER"))
+    );
 
-    if (!apiKey) {
+    if (!hasApiKey) {
       return NextResponse.json(
         {
           success: false,
           recommendedIds: [],
-          error:
-            "OpenRouter API Key not found. Please set OPENROUTER_API_KEY environment variable.",
+          error: "OpenRouter API 키가 설정되지 않았습니다.",
           executionTime: Date.now() - startTime,
         } as AIRecommendResponse,
         { status: 500 }
@@ -66,9 +71,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(
-      `🤖 AI 추천 시작: "${query}", ${products.length}개 상품 분석 (Llama 3.1 8B Instruct)`
-    );
+    console.log(`🤖 AI 추천 시작: "${query}", ${products.length}개 상품 분석 (Qwen3 8B)`);
 
     // 🔥 상품 데이터 요약 (토큰 절약)
     const productSummary = products
@@ -110,12 +113,12 @@ Important:
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json; charset=utf-8",
-        "HTTP-Referer": "http://localhost:3000",
-        "X-Title": "TheNawa Product Recommendation",
+        "HTTP-Referer": "https://thenawa.vercel.app",
+        "X-Title": "TheNawa Product Search",
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-3.1-8b-instruct:free", // 최고의 무료 모델
+        model: "meta-llama/llama-3.1-8b-instruct:free",
         messages: [
           {
             role: "user",
@@ -138,7 +141,7 @@ Important:
     const data = await response.json();
     const responseText = data.choices[0]?.message?.content || "";
 
-    console.log(`🤖 Llama 3.1 8B Instruct 응답: ${responseText}`);
+    console.log(`🤖 Qwen3 8B 응답: ${responseText}`);
 
     // 🔥 JSON 파싱 (안전한 파싱)
     let recommendationData;
