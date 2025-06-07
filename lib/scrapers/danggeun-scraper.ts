@@ -1,94 +1,229 @@
-import { BaseScraper } from './base-scraper'
-import { Product } from '@/types/product'
-import { load } from 'cheerio'
+import { BaseScraper } from "./base-scraper";
+import type { Product } from "@/types/product";
+import * as cheerio from "cheerio";
+import { browserManager } from "../browser-manager";
 
 export class DanggeunScraper extends BaseScraper {
-  sourceName = 'danggeun'
-  baseUrl = 'https://www.daangn.com'
+  sourceName = "danggeun";
+  baseUrl = "https://www.daangn.com";
 
-  async searchProducts(query: string, limit = 10): Promise<Product[]> { // 🔥 기본 limit 10으로 축소
+  async searchProducts(query: string, limit: number = 20): Promise<Product[]> {
+    const products: Product[] = [];
+    let page = null;
+
     try {
-      await this.initialize()
-      if (!this.page) throw new Error('Page not initialized')
+      // 🚀 Create page from shared browser
+      page = await browserManager.createPage();
 
-      const region = '마장동-56'
-      const url = `${this.baseUrl}/kr/buy-sell/?in=${encodeURIComponent(region)}&search=${encodeURIComponent(query)}`
-      
-      console.log(`🥕 당근마켓 고속 검색: ${query}`)
-      
-      // 🔥 최적화 1: 직접 검색 페이지로 이동 (홈페이지 건너뛰기)
-      await this.page.goto(url, { 
-        waitUntil: 'domcontentloaded', // networkidle2 대신 domcontentloaded로 더 빠르게
-        timeout: 6000  // 6초로 단축
-      })
-      
-      // 🔥 최적화 2: 빠른 셀렉터 대기 (더 짧은 타임아웃)
+      // 🔥 당근마켓 검색 URL
+      const searchUrl = `${this.baseUrl}/search/${encodeURIComponent(query)}`;
+      console.log(`🔍 당근마켓 검색: ${searchUrl}`);
+
+      // Navigate to search page
+      await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 30000 });
+
+      // Wait for search results with multiple possible selectors
       try {
-        await this.page.waitForSelector('a[data-gtm="search_article"]', { timeout: 3000 })
-        console.log('✅ 당근마켓 상품 로드 완료')
+        await page.waitForSelector('article[data-testid="article-card"]', { timeout: 15000 });
       } catch {
-        console.log('⚠️ 당근마켓 상품 로딩 지연, 계속 진행...')
-        // 실패해도 계속 진행
+        try {
+          await page.waitForSelector('a[href*="/articles/"]', { timeout: 10000 });
+        } catch {
+          await page.waitForSelector(".card-photo", { timeout: 5000 });
+        }
       }
-      
-      // 🔥 최적화 3: 스크롤 최소화 (고속 스크롤 사용)
-      await this.fastScroll()
 
-      // 🔥 최적화 4: 즉시 파싱 (추가 대기 없음)
-      const html = await this.page.content()
-      const $ = load(html)
-      const products: Product[] = []
+      // Pause to allow content to load
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // 🔥 최적화 5: 간소화된 상품 추출
-      $('a[data-gtm="search_article"]').each((i, el) => {
-        if (i >= limit) return false // 조기 종료
-        
-        const card = $(el)
-        
-        // 🔥 빠른 데이터 추출 (첫 번째 매치만)
-        const title = card.find('span.lm809sh').first().text().trim()
-        const priceText = card.find('span.lm809si').first().text().trim()
-        const location = card.find('span.lm809sj').first().text().trim()
-        
-        // 🔥 단순한 이미지 처리
-        let imageUrl = card.find('img').first().attr('src') || ''
-        if (imageUrl.startsWith('//')) {
-          imageUrl = 'https:' + imageUrl
+      // Get HTML and parse with Cheerio
+      const html = await page.content();
+      console.log(`📄 당근마켓 HTML 길이: ${html.length}`);
+
+      const $ = cheerio.load(html);
+
+      // 🎯 당근마켓 상품 선택자들 (우선순위 순으로)
+      const selectors = [
+        'article[data-testid="article-card"]', // 최신 선택자
+        'a[href*="/articles/"]', // 게시글 링크
+        "article", // 일반 article 태그
+        ".card-link",
+        ".article-link",
+        ".flea-market-article",
+      ];
+
+      let productElements = null;
+      let usedSelector = "";
+
+      // 선택자 시도
+      for (const selector of selectors) {
+        const elements = $(selector);
+        if (elements.length > 0) {
+          productElements = elements;
+          usedSelector = selector;
+          console.log(`✅ 당근마켓 선택자 성공: ${selector} (${elements.length}개 요소)`);
+          break;
         }
-        
-        // 🔥 기본 이미지가 없으면 빈 문자열 (플레이스홀더 생성 제거)
-        if (!imageUrl || imageUrl.includes('data:image/gif') || imageUrl.length < 20) {
-          imageUrl = ''
-        }
-        
-        const price = parseInt(priceText.replace(/[^0-9]/g, ''), 10) || 0
-        const relUrl = card.attr('href')
-        const productUrl = relUrl ? this.baseUrl + relUrl : ''
+      }
 
-        // 🔥 필수 필드만 검증
-        if (title && productUrl) {
-          products.push({
-            id: `danggeun_fast_${Date.now()}_${i}`,
-            title,
+      if (!productElements || productElements.length === 0) {
+        console.log(`❌ 당근마켓: 상품 요소를 찾을 수 없음`);
+        return [];
+      }
+
+      console.log(
+        `🎯 당근마켓 상품 요소 발견: ${productElements.length}개 (선택자: ${usedSelector})`
+      );
+
+      productElements.slice(0, limit).each((index, element) => {
+        try {
+          const $element = $(element);
+
+          // 🔍 제목 추출
+          let title =
+            $element.find('[data-testid="article-title"]').text().trim() ||
+            $element.find(".article-title").text().trim() ||
+            $element.find(".card-title").text().trim() ||
+            $element.find("h3, h4, h5").text().trim() ||
+            $element.find('[class*="title"]').text().trim() ||
+            $element.find("img").attr("alt") ||
+            "";
+
+          // 제목이 유효하지 않으면 스킵
+          if (!title || title.length < 3) {
+            return;
+          }
+
+          // 🔍 가격 추출
+          let priceText = "";
+          const fullText = $element.text();
+
+          // 가격 패턴 매칭 (숫자,원 형태)
+          const priceRegex = /(\d{1,3}(?:,\d{3})*)\s*원/;
+          const priceMatch = fullText.match(priceRegex);
+          if (priceMatch) {
+            priceText = priceMatch[0];
+          } else {
+            // 대체 방법들
+            priceText =
+              $element.find('[data-testid="article-price"]').text().trim() ||
+              $element.find(".article-price").text().trim() ||
+              $element.find(".card-price").text().trim() ||
+              $element.find('[class*="price"]').text().trim() ||
+              "가격 문의";
+          }
+
+          // 🔍 이미지 URL 추출
+          let imageUrl = "";
+
+          // 방법 1: 일반 이미지 태그
+          const imgElement = $element.find("img").first();
+          if (imgElement.length > 0) {
+            imageUrl =
+              imgElement.attr("src") ||
+              imgElement.attr("data-src") ||
+              imgElement.attr("data-lazy") ||
+              "";
+          }
+
+          // 방법 2: 배경 이미지
+          if (!imageUrl) {
+            const bgElement = $element.find('[style*="background-image"]');
+            if (bgElement.length > 0) {
+              const style = bgElement.attr("style") || "";
+              const bgMatch = style.match(/url\(['"]?(.*?)['"]?\)/);
+              if (bgMatch) {
+                imageUrl = bgMatch[1];
+              }
+            }
+          }
+
+          // 🔍 상품 URL 추출
+          let productUrl = "";
+          if ($element.is("a")) {
+            productUrl = $element.attr("href") || "";
+          } else {
+            productUrl = $element.find("a").first().attr("href") || "";
+          }
+
+          // URL 정제
+          if (productUrl && !productUrl.startsWith("http")) {
+            productUrl = productUrl.startsWith("/")
+              ? `${this.baseUrl}${productUrl}`
+              : `${this.baseUrl}/${productUrl}`;
+          }
+
+          // 상품 URL이 유효하지 않으면 스킵
+          if (
+            !productUrl ||
+            (!productUrl.includes("/articles/") && !productUrl.includes("/products/"))
+          ) {
+            return;
+          }
+
+          // 🔍 위치 정보 추출
+          let location =
+            $element.find('[data-testid="article-region"]').text().trim() ||
+            $element.find(".article-region").text().trim() ||
+            $element.find(".card-region").text().trim() ||
+            $element.find('[class*="region"]').text().trim() ||
+            $element.find('[class*="location"]').text().trim() ||
+            "당근마켓";
+
+          // 가격 처리
+          if (!priceText) {
+            priceText = "가격 문의";
+          }
+          const cleanPrice = priceText.replace(/[^\d]/g, "");
+          const price = cleanPrice ? parseInt(cleanPrice) : 0;
+
+          // 이미지 URL 정제
+          if (imageUrl) {
+            if (imageUrl.startsWith("//")) {
+              imageUrl = `https:${imageUrl}`;
+            } else if (!imageUrl.startsWith("http") && imageUrl.startsWith("/")) {
+              imageUrl = `${this.baseUrl}${imageUrl}`;
+            }
+          } else {
+            imageUrl = "";
+          }
+
+          const product: Product = {
+            id: `danggeun-${index}-${Date.now()}`,
+            title: title.substring(0, 100).trim(),
             price,
-            priceText: priceText || '가격 문의',
-            location: location || '서울시',
-            imageUrl,
+            priceText,
+            source: "danggeun" as const,
             productUrl,
-            source: 'danggeun',
+            imageUrl,
+            location: location.substring(0, 50).trim(),
             timestamp: new Date().toISOString(),
-          })
-        }
-      })
+            description: `당근마켓에서 판매 중인 ${title}`,
+          };
 
-      console.log(`🥕 당근마켓 고속 완료: ${products.length}개`)
-      return products
-      
+          products.push(product);
+          console.log(
+            `✅ 당근마켓 상품 추가: ${title} - ${priceText} (이미지: ${imageUrl ? "있음" : "없음"})`
+          );
+        } catch (error) {
+          console.error(`❌ 당근마켓 상품 파싱 오류:`, error);
+        }
+      });
+
+      console.log(`🎯 당근마켓 최종 결과: ${products.length}개 상품`);
+      return products.slice(0, limit);
     } catch (error) {
-      console.error('🥕 당근마켓 고속 오류:', error)
-      return []
+      console.error(`❌ 당근마켓 스크래핑 오류:`, error);
+      return [];
     } finally {
-      await this.cleanup()
+      // Always close the page
+      if (page) {
+        try {
+          await page.close();
+        } catch (e) {
+          console.error("❌ Error closing Danggeun page:", e);
+        }
+      }
     }
   }
 }

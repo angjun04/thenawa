@@ -1,143 +1,107 @@
-import { BaseScraper } from './base-scraper'
-import { Product } from '@/types/product'
-import { load } from 'cheerio'
+import { BaseScraper } from "./base-scraper";
+import type { Product } from "@/types/product";
+import * as cheerio from "cheerio";
+import { browserManager } from "../browser-manager";
 
 export class BunjangScraper extends BaseScraper {
-  sourceName = 'bunjang'
-  baseUrl = 'https://m.bunjang.co.kr'
+  sourceName = "bunjang";
+  baseUrl = "https://www.bunjang.co.kr";
 
-  async searchProducts(query: string, limit = 10): Promise<Product[]> {
+  async searchProducts(query: string, limit: number = 20): Promise<Product[]> {
+    const products: Product[] = [];
+    let page = null;
+
     try {
-      await this.initialize()
-      if (!this.page) throw new Error('Page not initialized')
+      // 🚀 Create page from shared browser
+      page = await browserManager.createPage();
 
-      const url = `${this.baseUrl}/search/products?q=${encodeURIComponent(query)}`
-      console.log(`⚡ 번개장터 고속 검색: ${query}`)
-      
-      // 🔥 최적화 1: 직접 검색, 홈페이지 건너뛰기
-      await this.page.goto(url, { 
-        waitUntil: 'domcontentloaded',
-        timeout: 5000  // 5초로 단축
-      })
-      
-      // 🔥 최적화 2: 빠른 셀렉터 감지
-      const selectors = ['a[data-pid]', '.sc-bdfBQB', '.product-item']
-      let found = false
-      
-      for (const selector of selectors) {
+      // 🔥 번개장터 검색 URL (exact same as example)
+      const searchUrl = `${this.baseUrl}/search/products?q=${encodeURIComponent(query)}`;
+      console.log(`🔍 번개장터 검색: ${searchUrl}`);
+
+      // Navigate to search page
+      await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 20000 });
+
+      // Wait for product cards to load (key selector from example)
+      await page.waitForSelector("a[data-pid]", { timeout: 20000 });
+
+      // Pause to allow images to load
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Get HTML and parse with Cheerio (like example)
+      const html = await page.content();
+      console.log(`📄 번개장터 HTML 길이: ${html.length}`);
+
+      const $ = cheerio.load(html);
+
+      // Use the exact selectors from your example
+      const productCards = $("a[data-pid]");
+      console.log(`🎯 번개장터 상품 카드 발견: ${productCards.length}개`);
+
+      if (productCards.length === 0) {
+        return [];
+      }
+
+      productCards.slice(0, limit).each((index, element) => {
         try {
-          await this.page.waitForSelector(selector, { timeout: 2000 }) // 2초로 단축
-          found = true
-          console.log(`✅ 번개장터 상품 발견: ${selector}`)
-          break
-        } catch {
-          continue
-        }
-      }
+          const card = $(element);
 
-      if (!found) {
-        console.log('⚠️ 번개장터 상품 없음, 빠른 종료')
-        return []
-      }
+          const pid = card.attr("data-pid");
+          const title = card.find("div.sc-RcBXQ").text().trim(); // Exact selector from example
+          const priceText = card.find("div.sc-iSDuPN").text().trim(); // Exact selector from example
+          const price = priceText ? parseInt(priceText.replace(/[^0-9]/g, ""), 10) || 0 : 0;
 
-      // 🔥 최적화 3: 최소한의 스크롤
-      await this.fastScroll()
-
-      const html = await this.page.content()
-      const $ = load(html)
-      const products: Product[] = []
-
-      // 🔥 최적화 4: 첫 번째 성공 셀렉터만 사용
-      const productSelectors = ['a[data-pid]', '.sc-bdfBQB a', '.product-item']
-      let foundSelector = ''
-
-      for (const selector of productSelectors) {
-        const elements = $(selector)
-        if (elements.length > 0) {
-          foundSelector = selector
-          break
-        }
-      }
-
-      if (!foundSelector) {
-        console.log('⚡ 번개장터 파싱 실패')
-        return []
-      }
-
-      // 🔥 최적화 5: 빠른 데이터 추출
-      $(foundSelector).slice(0, limit).each((i, el) => {
-        const card = $(el)
-        
-        // 간단한 셀렉터만 사용
-        const titleSelectors = ['div.sc-RcBXQ', '.product-title', 'h3']
-        let title = ''
-        for (const sel of titleSelectors) {
-          const titleEl = card.find(sel).first()
-          if (titleEl.length && titleEl.text().trim()) {
-            title = titleEl.text().trim()
-            break
+          // Image extraction (exact method from example)
+          let imageUrl =
+            card.find("img").attr("data-original") || card.find("img").attr("src") || "";
+          if (imageUrl.startsWith("//")) {
+            imageUrl = "https:" + imageUrl;
           }
-        }
 
-        const priceSelectors = ['div.sc-iSDuPN', '.product-price', '.price']
-        let priceText = ''
-        for (const sel of priceSelectors) {
-          const priceEl = card.find(sel).first()
-          if (priceEl.length && priceEl.text().trim()) {
-            priceText = priceEl.text().trim()
-            break
+          const href = card.attr("href") || "";
+          const productUrl = href.startsWith("http") ? href : this.baseUrl + href;
+
+          // Validate required fields (exact same logic as example)
+          if (pid && title && productUrl) {
+            const product: Product = {
+              id: `bunjang-${index}-${Date.now()}`,
+              title: title.substring(0, 100).trim(),
+              price,
+              priceText: priceText || "가격 문의",
+              source: "bunjang" as const,
+              productUrl,
+              imageUrl: imageUrl || "",
+              location: "번개장터",
+              timestamp: new Date().toISOString(),
+              description: `번개장터에서 판매 중인 ${title}`,
+            };
+
+            products.push(product);
+            console.log(
+              `✅ 번개장터 상품 추가: ${title} - ${priceText} (이미지: ${
+                imageUrl ? "있음" : "없음"
+              })`
+            );
           }
+        } catch (error) {
+          console.error(`❌ 번개장터 상품 파싱 오류:`, error);
         }
+      });
 
-        const price = parseInt(priceText.replace(/[^0-9]/g, ''), 10) || 0
-        
-        // 🔥 단순한 이미지 추출
-        let imageUrl = ''
-        const imgElement = card.find('img').first()
-        
-        if (imgElement.length) {
-          const imageAttributes = ['data-original', 'data-src', 'src']
-          
-          for (const attr of imageAttributes) {
-            const attrValue = imgElement.attr(attr)
-            if (attrValue && attrValue.trim() && attrValue.length > 20 && 
-                !attrValue.includes('data:image/gif')) {
-              imageUrl = attrValue.trim()
-              if (imageUrl.startsWith('//')) {
-                imageUrl = 'https:' + imageUrl
-              } else if (imageUrl.startsWith('/')) {
-                imageUrl = this.baseUrl + imageUrl
-              }
-              break
-            }
-          }
-        }
-
-        const href = card.attr('href') || ''
-        const productUrl = href.startsWith('http') ? href : this.baseUrl + href
-
-        if (title && productUrl) {
-          products.push({
-            id: `bunjang_fast_${Date.now()}_${i}`,
-            title,
-            price,
-            priceText: priceText || '가격 문의',
-            imageUrl,
-            productUrl,
-            source: 'bunjang',
-            timestamp: new Date().toISOString(),
-          })
-        }
-      })
-
-      console.log(`⚡ 번개장터 고속 완료: ${products.length}개`)
-      return products
-      
+      console.log(`🎯 번개장터 최종 결과: ${products.length}개 상품`);
+      return products.slice(0, limit);
     } catch (error) {
-      console.error('⚡ 번개장터 고속 오류:', error)
-      return []
+      console.error(`❌ 번개장터 스크래핑 오류:`, error);
+      return [];
     } finally {
-      await this.cleanup()
+      // Always close the page
+      if (page) {
+        try {
+          await page.close();
+        } catch (e) {
+          console.error("❌ Error closing Bunjang page:", e);
+        }
+      }
     }
   }
 }
