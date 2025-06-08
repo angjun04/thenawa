@@ -1,154 +1,176 @@
-'use client'
+"use client";
 
-import React, { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { 
+import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
   ArrowLeft,
   Loader2,
   Star,
   TrendingUp,
-  TrendingDown
-} from "lucide-react"
-import { getSourceName, getSourceColor } from "@/lib/utils"
+  TrendingDown,
+  ExternalLink,
+  MapPin,
+  User,
+  Package,
+  CheckCircle,
+  AlertCircle,
+} from "lucide-react";
+import { getSourceName, getSourceColor } from "@/lib/utils";
 
-// 타입 정의 (동일)
+// Updated type definitions
 interface Product {
-  id: string
-  title: string
-  price: number
-  priceText: string
-  source: string
-  imageUrl: string
-  productUrl: string
+  id: string;
+  title: string;
+  price: number;
+  priceText: string;
+  source: string;
+  imageUrl: string;
+  productUrl: string;
+}
+
+interface ProductDetail extends Product {
+  location?: string;
+  description: string;
+  condition: string;
+  sellerName: string;
+  sellerRating?: number;
+  additionalImages: string[];
+  specifications: Record<string, string>;
+  tags: string[];
+  viewCount?: number;
+  likeCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface ProductAnalysis {
-  id: string
-  valueRating: number
-  pros: string[]
-  cons: string[]
+  id: string;
+  valueRating: number;
+  pros: string[];
+  cons: string[];
+  conditionScore: number;
+  priceScore: number;
 }
 
 interface ComparisonAnalysis {
-  comparison: Record<string, string>
-  products: ProductAnalysis[]
+  comparison: Record<string, string>;
+  products: ProductAnalysis[];
   bestValue: {
-    reason: string
-  }
-  recommendations: string
+    productId: string;
+    reason: string;
+  };
+  recommendations: string;
+  summary: string;
 }
 
-// Mock API functions (동일)
-const getProductById = async (id: string): Promise<Product> => {
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  const mockProducts: Record<string, Product> = {
-    "1": {
-      id: "1",
-      title: "아이폰 14 Pro 128GB 딥퍼플",
-      price: 920000,
-      priceText: "920,000원",
-      source: "danggeun",
-      imageUrl: "/api/placeholder/400/300",
-      productUrl: "https://example.com/1",
-    },
-    "2": {
-      id: "2",
-      title: "아이폰 14 Pro 256GB 스페이스블랙",
-      price: 1050000,
-      priceText: "1,050,000원",
-      source: "bunjang",
-      imageUrl: "/api/placeholder/400/300",
-      productUrl: "https://example.com/2",
-    }
-  }
-  
-  return mockProducts[id] || mockProducts["1"]
-}
-
-const compareTechProducts = async (productIds: string[]): Promise<{ analysis: ComparisonAnalysis }> => {
-  await new Promise(resolve => setTimeout(resolve, 1500))
-  
-  return {
-    analysis: {
-      comparison: {
-        "가격": "첫 번째 제품이 더 저렴합니다",
-        "상태": "두 제품 모두 양호한 상태입니다", 
-        "용량": "두 번째 제품이 더 큰 용량을 제공합니다"
-      },
-      products: productIds.map((id, index) => ({
-        id,
-        valueRating: index === 0 ? 8.5 : 7.2,
-        pros: index === 0 ? ["저렴한 가격", "양호한 상태"] : ["큰 용량", "최신 상태"],
-        cons: index === 0 ? ["상대적으로 작은 용량"] : ["높은 가격"]
-      })),
-      bestValue: {
-        reason: "첫 번째 제품이 가격 대비 성능이 우수합니다"
-      },
-      recommendations: "용량이 중요하다면 두 번째 제품을, 가격이 중요하다면 첫 번째 제품을 추천합니다"
-    }
-  }
+interface ComparisonResponse {
+  success: boolean;
+  analysis: ComparisonAnalysis;
+  detailedProducts: ProductDetail[];
 }
 
 export default function ComparisonPageContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  
-  const productIds = (searchParams.get("ids") || "").split(",").filter(Boolean)
-  
-  const [products, setProducts] = useState<Product[]>([])
-  const [analysis, setAnalysis] = useState<ComparisonAnalysis | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const fetchData = async () => {
-    if (productIds.length < 2) {
-      setError("비교할 제품을 최소 2개 선택해주세요.")
-      setLoading(false)
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-    
-    try {
-      // 제품 정보 가져오기
-      const productPromises = productIds.map(id => getProductById(id))
-      const fetchedProducts = await Promise.all(productPromises)
-      setProducts(fetchedProducts)
-      
-      // AI 비교 분석
-      const comparisonResult = await compareTechProducts(productIds)
-      setAnalysis(comparisonResult.analysis)
-    } catch (err) {
-      setError("비교 분석을 불러오는데 실패했습니다."+err)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [detailedProducts, setDetailedProducts] = useState<ProductDetail[]>([]);
+  const [analysis, setAnalysis] = useState<ComparisonAnalysis | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData()
-  }, [productIds.join(",")]) // 의존성 배열 최적화
+    const productData = searchParams.get("products");
+    const productIds = searchParams.get("ids");
+
+    if (productData) {
+      // New format with full product data
+      try {
+        const parsedProducts = JSON.parse(decodeURIComponent(productData));
+        if (Array.isArray(parsedProducts) && parsedProducts.length >= 2) {
+          fetchComparison(parsedProducts);
+        } else {
+          setError("비교할 제품을 최소 2개 선택해주세요.");
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("제품 데이터 파싱 오류:", err);
+        setError("제품 정보를 불러올 수 없습니다.");
+        setLoading(false);
+      }
+    } else if (productIds) {
+      // Old format with IDs only - redirect to search with error
+      setError("이전 버전의 링크입니다. 검색 페이지에서 다시 제품을 선택해주세요.");
+      setLoading(false);
+      setTimeout(() => {
+        router.push("/search");
+      }, 3000);
+    } else {
+      setError("비교할 제품 정보가 없습니다.");
+      setLoading(false);
+    }
+  }, [searchParams, router]);
+
+  const fetchComparison = async (products: Product[]) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log("🔄 비교 분석 요청 중...", products.length + "개 제품");
+
+      const response = await fetch("/api/compare", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ products }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "비교 분석을 불러오는데 실패했습니다.");
+      }
+
+      const data: ComparisonResponse = await response.json();
+
+      if (data.success) {
+        setDetailedProducts(data.detailedProducts);
+        setAnalysis(data.analysis);
+        console.log("✅ 비교 분석 완료");
+      } else {
+        throw new Error("비교 분석에 실패했습니다.");
+      }
+    } catch (err) {
+      console.error("❌ 비교 분석 오류:", err);
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return (
       <div className="container mx-auto max-w-6xl px-4 py-12 text-center">
         <Loader2 className="w-12 h-12 animate-spin text-brand-500 mx-auto mb-4" />
-        <p>제품을 비교 분석하는 중...</p>
+        <div className="space-y-2">
+          <p className="text-lg font-medium">제품을 비교 분석하는 중...</p>
+          <p className="text-sm text-gray-500">
+            상품 상세 정보를 수집하고 AI 분석을 진행하고 있습니다.
+          </p>
+        </div>
       </div>
-    )
+    );
   }
 
   if (error) {
     return (
       <div className="container mx-auto max-w-6xl px-4 py-12">
         <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
         <div className="text-center">
@@ -158,66 +180,199 @@ export default function ComparisonPageContent() {
           </Button>
         </div>
       </div>
-    )
+    );
   }
+
+  const getBestValueProduct = () => {
+    if (!analysis) return null;
+    return detailedProducts.find((p) => p.id === analysis.bestValue.productId);
+  };
+
+  const bestProduct = getBestValueProduct();
 
   return (
     <div className="bg-gray-50 min-h-screen">
       <div className="container mx-auto max-w-6xl px-4 py-6">
         {/* 뒤로가기 버튼 */}
-        <Button 
-          variant="outline" 
-          onClick={() => router.back()}
-          className="mb-6"
-        >
+        <Button variant="outline" onClick={() => router.back()} className="mb-6">
           <ArrowLeft className="w-4 h-4 mr-2" />
           돌아가기
         </Button>
 
-        <h1 className="text-3xl font-bold mb-8">제품 비교</h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold">제품 비교 분석</h1>
+          {bestProduct && (
+            <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 px-3 py-1">
+              <Star className="w-4 h-4 mr-1" />
+              추천: {bestProduct.title.substring(0, 20)}...
+            </Badge>
+          )}
+        </div>
 
-        {/* 제품 카드들 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {products.map((product) => (
-            <Card key={product.id} className="rounded-xl">
-              <div className="aspect-video bg-gray-100 rounded-t-xl overflow-hidden">
-                <img 
-                  src={product.imageUrl} 
-                  alt={product.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <CardContent className="p-6">
-                <Badge 
-                  className="mb-2 text-white"
-                  style={{ backgroundColor: getSourceColor(product.source) }}
-                >
-                  {getSourceName(product.source)}
-                </Badge>
-                <h3 className="text-xl font-semibold mb-2">{product.title}</h3>
-                <p className="text-2xl font-bold text-brand-500">{product.priceText}</p>
-              </CardContent>
-            </Card>
-          ))}
+        {/* 제품 카드들 - 상세 정보 포함 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {detailedProducts.map((product) => {
+            const productAnalysis = analysis?.products.find((p) => p.id === product.id);
+            const isBestValue = analysis?.bestValue.productId === product.id;
+
+            return (
+              <Card
+                key={product.id}
+                className={`rounded-xl ${isBestValue ? "ring-2 ring-yellow-400 bg-yellow-50" : ""}`}
+              >
+                {isBestValue && (
+                  <div className="bg-yellow-400 text-yellow-900 text-center py-2 rounded-t-xl font-medium">
+                    🏆 AI 추천 제품
+                  </div>
+                )}
+
+                <div className="aspect-video bg-gray-100 rounded-t-xl overflow-hidden">
+                  <img
+                    src={product.imageUrl}
+                    alt={product.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+
+                <CardContent className="p-6 space-y-4">
+                  <div className="flex items-start justify-between">
+                    <Badge
+                      className="text-white"
+                      style={{ backgroundColor: getSourceColor(product.source) }}
+                    >
+                      {getSourceName(product.source)}
+                    </Badge>
+                    {productAnalysis && (
+                      <div className="flex items-center">
+                        <Star className="w-4 h-4 text-yellow-500 mr-1" />
+                        <span className="font-bold">{productAnalysis.valueRating}/10</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <h3 className="text-xl font-semibold leading-tight">{product.title}</h3>
+
+                  <div className="flex items-center justify-between">
+                    <p className="text-2xl font-bold text-brand-500">{product.priceText}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(product.productUrl, "_blank")}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-1" />
+                      보기
+                    </Button>
+                  </div>
+
+                  {/* 상세 정보 */}
+                  <div className="space-y-3 border-t pt-4">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <User className="w-4 h-4 mr-2" />
+                      판매자: {product.sellerName}
+                    </div>
+
+                    {product.location && (
+                      <div className="flex items-center text-sm text-gray-600">
+                        <MapPin className="w-4 h-4 mr-2" />
+                        위치: {product.location}
+                      </div>
+                    )}
+
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Package className="w-4 h-4 mr-2" />
+                      상태: {product.condition}
+                    </div>
+
+                    {product.description && (
+                      <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                        <p className="line-clamp-3">{product.description}</p>
+                      </div>
+                    )}
+
+                    {/* 사양 정보 */}
+                    {Object.keys(product.specifications).length > 0 && (
+                      <div className="text-sm">
+                        <h4 className="font-medium mb-2">제품 사양:</h4>
+                        <div className="space-y-1">
+                          {Object.entries(product.specifications)
+                            .slice(0, 3)
+                            .map(([key, value]) => (
+                              <div key={key} className="flex justify-between">
+                                <span className="text-gray-600">{key}:</span>
+                                <span className="font-medium">{value}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 장단점 */}
+                    {productAnalysis && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="flex items-center text-green-600 text-sm font-medium mb-1">
+                            <TrendingUp className="w-3 h-3 mr-1" />
+                            장점
+                          </div>
+                          <ul className="text-xs text-green-700 space-y-1">
+                            {productAnalysis.pros.slice(0, 2).map((pro, i) => (
+                              <li key={i} className="flex items-start">
+                                <CheckCircle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
+                                {pro}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center text-red-600 text-sm font-medium mb-1">
+                            <TrendingDown className="w-3 h-3 mr-1" />
+                            단점
+                          </div>
+                          <ul className="text-xs text-red-700 space-y-1">
+                            {productAnalysis.cons.slice(0, 2).map((con, i) => (
+                              <li key={i} className="flex items-start">
+                                <AlertCircle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
+                                {con}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {/* AI 분석 결과 */}
         {analysis && (
           <Card className="rounded-xl">
             <CardHeader>
-              <CardTitle className="flex items-center">
-                🤖 AI 비교 분석
-              </CardTitle>
+              <CardTitle className="flex items-center">🤖 AI 종합 비교 분석</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* 전체 비교 */}
+              {/* 분석 요약 */}
+              {analysis.summary && (
+                <Alert className="bg-blue-50 border-blue-200">
+                  <AlertCircle className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-800">
+                    <div className="font-medium mb-1">분석 요약</div>
+                    <div>{analysis.summary}</div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* 카테고리별 비교 */}
               <div>
-                <h3 className="text-lg font-semibold mb-4">📊 종합 비교</h3>
-                <div className="space-y-3">
+                <h3 className="text-lg font-semibold mb-4">📊 카테고리별 비교</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {Object.entries(analysis.comparison).map(([key, value]) => (
                     <div key={key} className="bg-gray-50 rounded-lg p-4">
-                      <div className="font-medium text-brand-600 mb-1">{key}</div>
-                      <div className="text-gray-700">{value as string}</div>
+                      <div className="font-medium text-brand-600 mb-2">{key}</div>
+                      <div className="text-gray-700 text-sm">{value as string}</div>
                     </div>
                   ))}
                 </div>
@@ -225,62 +380,13 @@ export default function ComparisonPageContent() {
 
               <Separator />
 
-              {/* 개별 제품 분석 */}
-              <div>
-                <h3 className="text-lg font-semibold mb-4">🎯 개별 제품 분석</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {analysis.products.map((productAnalysis: ProductAnalysis, index: number) => {
-                    const product = products[index]
-                    if (!product) return null
-                    
-                    return (
-                      <Card key={productAnalysis.id} className="border-2">
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-medium truncate">{product.title}</h4>
-                            <div className="flex items-center">
-                              <Star className="w-4 h-4 text-yellow-500 mr-1" />
-                              <span className="font-bold">{productAnalysis.valueRating}/10</span>
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-3">
-                            <div>
-                              <div className="flex items-center text-green-600 text-sm font-medium mb-1">
-                                <TrendingUp className="w-3 h-3 mr-1" />
-                                장점
-                              </div>
-                              <div className="text-sm text-gray-700">
-                                {productAnalysis.pros.join(", ")}
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <div className="flex items-center text-red-600 text-sm font-medium mb-1">
-                                <TrendingDown className="w-3 h-3 mr-1" />
-                                단점
-                              </div>
-                              <div className="text-sm text-gray-700">
-                                {productAnalysis.cons.join(", ")}
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <Separator />
-
               {/* 최고 가성비 제품 */}
               <div>
-                <h3 className="text-lg font-semibold mb-4">🏆 최고 가성비</h3>
+                <h3 className="text-lg font-semibold mb-4">🏆 최고 가성비 제품</h3>
                 <Alert className="bg-yellow-50 border-yellow-200">
                   <Star className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-yellow-800">
-                    <div className="font-medium mb-1">추천 제품</div>
+                    <div className="font-medium mb-1">추천: {bestProduct?.title}</div>
                     <div>{analysis.bestValue.reason}</div>
                   </AlertDescription>
                 </Alert>
@@ -288,11 +394,84 @@ export default function ComparisonPageContent() {
 
               <Separator />
 
-              {/* 구매 추천 */}
+              {/* 구매 가이드 */}
               <div>
                 <h3 className="text-lg font-semibold mb-4">💡 구매 가이드</h3>
                 <div className="bg-brand-50 rounded-lg p-4 text-brand-800">
                   {analysis.recommendations}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* 점수 비교 차트 */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">📈 점수 비교</h3>
+                <div className="space-y-4">
+                  {analysis.products.map((productAnalysis) => {
+                    const product = detailedProducts.find((p) => p.id === productAnalysis.id);
+                    if (!product) return null;
+
+                    return (
+                      <div key={productAnalysis.id} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium">{product.title.substring(0, 40)}...</h4>
+                          <Badge
+                            variant={
+                              analysis.bestValue.productId === productAnalysis.id
+                                ? "default"
+                                : "secondary"
+                            }
+                          >
+                            총점: {productAnalysis.valueRating}/10
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <div className="text-gray-600 mb-1">가격 점수</div>
+                            <div className="flex items-center">
+                              <div className="bg-gray-200 rounded-full h-2 flex-1 mr-2">
+                                <div
+                                  className="bg-blue-500 h-2 rounded-full"
+                                  style={{ width: `${productAnalysis.priceScore * 10}%` }}
+                                />
+                              </div>
+                              <span className="font-medium">{productAnalysis.priceScore}/10</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="text-gray-600 mb-1">상태 점수</div>
+                            <div className="flex items-center">
+                              <div className="bg-gray-200 rounded-full h-2 flex-1 mr-2">
+                                <div
+                                  className="bg-green-500 h-2 rounded-full"
+                                  style={{ width: `${productAnalysis.conditionScore * 10}%` }}
+                                />
+                              </div>
+                              <span className="font-medium">
+                                {productAnalysis.conditionScore}/10
+                              </span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="text-gray-600 mb-1">종합 점수</div>
+                            <div className="flex items-center">
+                              <div className="bg-gray-200 rounded-full h-2 flex-1 mr-2">
+                                <div
+                                  className="bg-yellow-500 h-2 rounded-full"
+                                  style={{ width: `${productAnalysis.valueRating * 10}%` }}
+                                />
+                              </div>
+                              <span className="font-medium">{productAnalysis.valueRating}/10</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </CardContent>
@@ -300,5 +479,5 @@ export default function ComparisonPageContent() {
         )}
       </div>
     </div>
-  )
+  );
 }

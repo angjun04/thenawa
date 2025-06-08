@@ -268,8 +268,25 @@ export default function SearchPageContent() {
   }, []);
 
   const goCompare = useCallback(() => {
-    router.push(`/compare?ids=${selectedIds.join(",")}`);
-  }, [router, selectedIds]);
+    console.log("🔄 goCompare called with:", { selectedIds, productsCount: products.length });
+
+    // Get the selected product objects
+    const selectedProducts = products.filter((product) => selectedIds.includes(product.id));
+
+    console.log("📦 Selected products:", selectedProducts);
+
+    if (selectedProducts.length < 2) {
+      alert("비교할 제품을 최소 2개 선택해주세요.");
+      return;
+    }
+
+    // Encode product data for URL
+    const encodedProducts = encodeURIComponent(JSON.stringify(selectedProducts));
+    const compareUrl = `/compare?products=${encodedProducts}`;
+
+    console.log("🔗 Navigating to:", compareUrl);
+    router.push(compareUrl);
+  }, [router, selectedIds, products]);
 
   const handleSourcesChange = useCallback((value: string) => {
     const newSources = value.split(",").filter(Boolean);
