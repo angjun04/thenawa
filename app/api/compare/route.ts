@@ -52,29 +52,38 @@ export async function POST(request: NextRequest) {
         console.log(`📦 상품 상세 정보 수집: ${product.title}`);
         const detail = await scraper.scrapeProductDetail(product.productUrl, product.source);
 
-        if (detail) {
+        if (
+          detail &&
+          detail.title &&
+          detail.title !== "제품명 정보 없음" &&
+          !detail.title.includes(product.source)
+        ) {
+          // Valid detail scraped - use it
           detailedProducts.push(detail);
         } else {
-          // Fallback to basic product info if scraping fails
+          console.log(
+            `⚠️ 상세 정보 수집 실패 또는 부정확한 데이터, 원본 데이터 사용: ${product.title}`
+          );
+          // Fallback to original product info with enhanced data
           detailedProducts.push({
             ...product,
-            description: "상세 정보를 불러올 수 없습니다.",
+            description: product.title + " - " + product.source + "에서 판매 중인 상품입니다.",
             condition: "상품 상태 정보 없음",
             sellerName: "판매자",
-            additionalImages: [],
+            additionalImages: [product.imageUrl].filter(Boolean),
             specifications: {},
             tags: [],
           });
         }
       } catch (error) {
         console.error(`❌ 상품 상세 정보 수집 실패: ${product.title}`, error);
-        // Use basic info as fallback
+        // Use original product info as fallback
         detailedProducts.push({
           ...product,
-          description: "상세 정보를 불러올 수 없습니다.",
+          description: product.title + " - " + product.source + "에서 판매 중인 상품입니다.",
           condition: "상품 상태 정보 없음",
           sellerName: "판매자",
-          additionalImages: [],
+          additionalImages: [product.imageUrl].filter(Boolean),
           specifications: {},
           tags: [],
         });
@@ -193,6 +202,8 @@ ${products
     const data = await response.json();
     const content = data.choices[0]?.message?.content;
 
+    console.log("🤖 AI 원본 응답:", content);
+
     if (!content) {
       throw new Error("AI 응답을 받을 수 없습니다.");
     }
@@ -202,12 +213,15 @@ ${products
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
+        console.log("🔍 JSON 추출 성공:", jsonMatch[0].substring(0, 200) + "...");
         analysis = JSON.parse(jsonMatch[0]);
+        console.log("✅ 파싱된 분석 데이터:", analysis);
       } else {
         throw new Error("JSON 형식을 찾을 수 없습니다.");
       }
     } catch (parseError) {
       console.error("❌ AI 응답 파싱 오류:", parseError);
+      console.error("❌ 파싱 실패한 내용:", content);
 
       // Fallback analysis
       analysis = {

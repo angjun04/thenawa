@@ -84,33 +84,77 @@ export default function ComparisonPageContent() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log("🚀 Comparison page useEffect triggered");
+
     const productData = searchParams.get("products");
     const productIds = searchParams.get("ids");
+    const fullURL = typeof window !== "undefined" ? window.location.href : "undefined";
+
+    console.log("🔍 Comparison page URL params:", {
+      productData: productData ? `exists (${productData.length} chars)` : "null",
+      productIds: productIds ? `exists (${productIds.length} chars)` : "null",
+      fullURL,
+      searchParamsSize: searchParams.toString().length,
+      allParams: Object.fromEntries(searchParams.entries()),
+    });
 
     if (productData) {
       // New format with full product data
       try {
-        const parsedProducts = JSON.parse(decodeURIComponent(productData));
+        console.log("📦 Raw product data (first 300 chars):", productData.substring(0, 300));
+        console.log("📦 Raw product data (last 100 chars):", productData.slice(-100));
+
+        const decodedData = decodeURIComponent(productData);
+        console.log("🔓 Decoded data (first 300 chars):", decodedData.substring(0, 300));
+
+        const parsedProducts = JSON.parse(decodedData);
+        console.log("✅ Parsed products:", {
+          count: Array.isArray(parsedProducts) ? parsedProducts.length : "not array",
+          types: Array.isArray(parsedProducts) ? parsedProducts.map((p) => typeof p) : "not array",
+          firstProduct:
+            Array.isArray(parsedProducts) && parsedProducts[0]
+              ? {
+                  id: parsedProducts[0].id,
+                  title: parsedProducts[0].title,
+                  source: parsedProducts[0].source,
+                }
+              : "no first product",
+        });
+
         if (Array.isArray(parsedProducts) && parsedProducts.length >= 2) {
+          console.log("✅ Valid products array, starting comparison...");
           fetchComparison(parsedProducts);
         } else {
+          console.error("❌ Invalid products array:", {
+            isArray: Array.isArray(parsedProducts),
+            length: Array.isArray(parsedProducts) ? parsedProducts.length : "not array",
+            data: parsedProducts,
+          });
           setError("비교할 제품을 최소 2개 선택해주세요.");
           setLoading(false);
         }
       } catch (err) {
-        console.error("제품 데이터 파싱 오류:", err);
-        setError("제품 정보를 불러올 수 없습니다.");
+        console.error("❌ 제품 데이터 파싱 오류:", err);
+        console.error("❌ Failed to parse product data:", {
+          rawData: productData.substring(0, 500),
+          error: err instanceof Error ? err.message : String(err),
+        });
+        setError("제품 정보를 불러올 수 없습니다. 데이터 파싱 실패.");
         setLoading(false);
       }
     } else if (productIds) {
       // Old format with IDs only - redirect to search with error
+      console.log("⚠️ Old format detected, productIds:", productIds);
       setError("이전 버전의 링크입니다. 검색 페이지에서 다시 제품을 선택해주세요.");
       setLoading(false);
       setTimeout(() => {
+        console.log("🔄 Redirecting to search page...");
         router.push("/search");
       }, 3000);
     } else {
-      setError("비교할 제품 정보가 없습니다.");
+      console.error("❌ No product data found in URL parameters");
+      console.error("❌ Available search params:", Object.fromEntries(searchParams.entries()));
+      setError("비교할 제품 정보가 없습니다. URL에서 제품 데이터를 찾을 수 없습니다.");
       setLoading(false);
     }
   }, [searchParams, router]);
@@ -141,6 +185,8 @@ export default function ComparisonPageContent() {
         setDetailedProducts(data.detailedProducts);
         setAnalysis(data.analysis);
         console.log("✅ 비교 분석 완료");
+        console.log("📊 Analysis data:", data.analysis);
+        console.log("📦 Detailed products:", data.detailedProducts);
       } else {
         throw new Error("비교 분석에 실패했습니다.");
       }
@@ -227,11 +273,25 @@ export default function ComparisonPageContent() {
                 )}
 
                 <div className="aspect-video bg-gray-100 rounded-t-xl overflow-hidden">
-                  <img
-                    src={product.imageUrl}
-                    alt={product.title}
-                    className="w-full h-full object-cover"
-                  />
+                  {product.imageUrl ? (
+                    <img
+                      src={product.imageUrl}
+                      alt={product.title}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                        (e.target as HTMLImageElement).parentElement!.innerHTML =
+                          '<div class="w-full h-full flex items-center justify-center text-gray-400"><div class="text-center"><div class="text-4xl mb-2">📱</div><div class="text-sm">이미지 없음</div></div></div>';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                      <div className="text-center">
+                        <div className="text-4xl mb-2">📱</div>
+                        <div className="text-sm">이미지 없음</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <CardContent className="p-6 space-y-4">
