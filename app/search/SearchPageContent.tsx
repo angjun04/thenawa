@@ -25,10 +25,10 @@ import {
   Plus,
   Loader2,
   Sparkles,
-  Brain,
   Zap,
   Star,
 } from "lucide-react";
+import DynamicLoader from "@/components/ui/dynamic-loader";
 import { formatPrice, getSourceName, getSourceColor } from "@/lib/utils";
 
 // Product 타입 정의 (검색 페이지용, id로 변경)
@@ -202,6 +202,17 @@ export default function SearchPageContent() {
         priceRange[0],
         priceRange[1]
       );
+
+      // Debug logging for API response
+      console.log("🔍 API Response Debug:", {
+        totalProducts: result.products.length,
+        sourceCounts: result.products.reduce((acc, p) => {
+          acc[p.source] = (acc[p.source] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>),
+        bunjangProducts: result.products.filter((p) => p.source === "bunjang").map((p) => p.title),
+      });
+
       setProducts(result.products);
       setSelectedIds([]);
 
@@ -236,8 +247,54 @@ export default function SearchPageContent() {
   }, []);
 
   const goCompare = useCallback(() => {
-    router.push(`/compare?ids=${selectedIds.join(",")}`);
-  }, [router, selectedIds]);
+    // Get the full product objects for the selected IDs
+    const selectedProducts = products.filter((product) => selectedIds.includes(product.id));
+
+    if (selectedProducts.length >= 2) {
+      try {
+        // Clean and sanitize product data for safer encoding
+        const cleanProducts = selectedProducts.map((product) => ({
+          ...product,
+          title: product.title.replace(/[\u200B-\u200D\uFEFF]/g, ""), // Remove zero-width spaces
+        }));
+
+        // Encode the full product objects as JSON with safer encoding
+        const jsonString = JSON.stringify(cleanProducts);
+        const encodedProducts = encodeURIComponent(jsonString);
+
+        console.log("🔄 Navigating to comparison with", cleanProducts.length, "products");
+        console.log(
+          "📏 JSON length:",
+          jsonString.length,
+          "Encoded length:",
+          encodedProducts.length
+        );
+
+        router.push(`/compare?products=${encodedProducts}`);
+      } catch (error) {
+        console.error("❌ Error encoding products for comparison:", error);
+        // Fallback: try with minimal data
+        try {
+          const minimalProducts = selectedProducts.map((product) => ({
+            id: product.id,
+            title: product.title.substring(0, 100), // Truncate title
+            price: product.price,
+            priceText: product.priceText,
+            source: product.source,
+            productUrl: product.productUrl,
+            imageUrl: product.imageUrl,
+            location: product.location || "",
+            description: product.title, // Use title as description fallback
+          }));
+          const encodedProducts = encodeURIComponent(JSON.stringify(minimalProducts));
+          router.push(`/compare?products=${encodedProducts}`);
+        } catch (fallbackError) {
+          console.error("❌ Fallback encoding also failed:", fallbackError);
+          alert("비교 페이지로 이동하는데 문제가 발생했습니다. 다시 시도해주세요.");
+        }
+      }
+    }
+  }, [router, selectedIds, products]);
 
   const handleSourcesChange = useCallback((value: string) => {
     const newSources = value.split(",").filter(Boolean);
@@ -256,6 +313,18 @@ export default function SearchPageContent() {
   const includeKeys = tokens.filter((t) => t.startsWith("+")).map((t) => t.slice(1));
   const excludeKeys = tokens.filter((t) => t.startsWith("-")).map((t) => t.slice(1));
 
+  // Debug logging for product filtering
+  console.log("🔍 Frontend Debug:", {
+    totalProducts: products.length,
+    sourceCounts: products.reduce((acc, p) => {
+      acc[p.source] = (acc[p.source] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>),
+    activeTab,
+    selectedSources,
+    priceRange,
+  });
+
   const filtered = products
     .filter((p) => (activeTab === "all" ? true : p.source === activeTab))
     .filter((p) => selectedSources.includes(p.source))
@@ -266,6 +335,14 @@ export default function SearchPageContent() {
   const sorted = [...filtered].sort((a, b) =>
     sortBy === "price_asc" ? a.price - b.price : b.price - a.price
   );
+
+  // Debug logging for final results
+  console.log("📊 Filtered Results:", {
+    filteredCount: filtered.length,
+    finalCount: sorted.length,
+    bunjangFiltered: filtered.filter((p) => p.source === "bunjang").length,
+    bunjangFinal: sorted.filter((p) => p.source === "bunjang").length,
+  });
 
   // 🤖 AI 추천 상품 여부 확인 함수
   const isAIRecommended = useCallback(
@@ -392,10 +469,12 @@ export default function SearchPageContent() {
                 {showAIRecommendations && (
                   <CardContent>
                     {aiLoading ? (
-                      <div className="flex items-center gap-3 text-amber-600">
-                        <Brain className="w-5 h-5 animate-pulse" />
-                        <span>AI가 상품을 분석 중입니다...</span>
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                      <div className="py-4">
+                        <DynamicLoader
+                          type="ai-analysis"
+                          showProgress={true}
+                          subtitle="상품을 분석하여 최적의 추천을 찾고 있습니다."
+                        />
                       </div>
                     ) : aiError ? (
                       <div className="text-red-600 flex items-center gap-2">
@@ -512,11 +591,7 @@ export default function SearchPageContent() {
 
         {/* 검색 결과 */}
         {loading ? (
-          <div className="text-center py-12">
-            <Loader2 className="w-12 h-12 animate-spin text-brand-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold">검색 중입니다...</h3>
-            <p className="text-gray-600 mt-2">잠시만 기다려주세요...</p>
-          </div>
+          <DynamicLoader type="search" subtitle="검색 조건에 맞는 상품을 찾고 있습니다." />
         ) : error ? (
           <Card className="rounded-xl border-red-200">
             <CardContent className="p-6 text-center">
