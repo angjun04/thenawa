@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
+import Topbar from "@/components/Topbar"
 import {
   Select,
   SelectContent,
@@ -18,7 +19,6 @@ import {
 } from "@/components/ui/select";
 import {
   Search,
-  MapPin,
   Settings,
   ArrowUpDown,
   Eye,
@@ -355,24 +355,9 @@ export default function SearchPageContent() {
   return (
     <div className="bg-gray-50 min-h-screen">
       {/* 헤더 섹션 */}
+      <Topbar />
       <div className="bg-white shadow-sm">
         <div className="container mx-auto max-w-6xl px-4 py-4">
-          <div className="flex items-center justify-between mb-6">
-            <div
-              className="flex items-center gap-3 cursor-pointer"
-              onClick={() => router.push("/")}
-            >
-              <div className="w-8 h-8 bg-brand-500 rounded-full flex items-center justify-center">
-                🔍
-              </div>
-              <span className="text-xl font-bold text-brand-500">더나와</span>
-            </div>
-
-            <Badge variant="outline" className="text-brand-500 border-brand-200">
-              <MapPin className="w-3 h-3 mr-1" />
-              {selectedLocation}
-            </Badge>
-          </div>
 
           {/* 검색 바 */}
           <form onSubmit={handleSearch} className="mb-4">

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Search
 } from "lucide-react"
-
+import Topbar from "@/components/Topbar"
 export default function HomePage() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
@@ -22,30 +22,7 @@ export default function HomePage() {
 
   return (
     <div className="bg-gradient-to-br from-blue-50 via-white to-orange-50 min-h-screen">
-      {/* 헤더 */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200">
-        <div className="container mx-auto max-w-6xl px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-brand-500 rounded-full flex items-center justify-center">
-                🔍
-              </div>
-              <span className="text-2xl font-bold text-brand-500">더나와</span>
-            </div>
-            <nav className="hidden md:flex gap-6">
-              <Button variant="ghost" className="text-gray-600">
-                검색
-              </Button>
-              <Button variant="ghost" className="text-gray-600">
-                비교
-              </Button>
-              <Button variant="ghost" className="text-gray-600">
-                도움말
-              </Button>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <Topbar />
 
       <main>
         {/* 히어로 섹션 */}
