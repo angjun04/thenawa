@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DanggeunScraper } from "@/lib/scrapers/danggeun-scraper";
-import { BunjangScraper } from "@/lib/scrapers/bunjang-scraper";
-import { JunggonaraScraper } from "@/lib/scrapers/junggonara-scraper";
+// import { DanggeunScraper } from "@/lib/scrapers/danggeun-scraper";
+import { DanggeunFastScraper } from "@/lib/scrapers/danggeun-fast-scraper";
+import { BunjangFastScraper } from "@/lib/scrapers/bunjang-fast-scraper";
+import { JunggonaraFastScraper } from "@/lib/scrapers/junggonara-fast-scraper";
 import { BaseScraper } from "@/lib/scrapers/base-scraper";
 import { SearchRequest, SearchResponse, Product } from "@/types/product";
 
@@ -84,9 +85,13 @@ async function runScraperWithTimeout(
 }
 
 // 🔥 핵심 최적화 3: Vercel 적응형 병렬 처리
-async function runScrapersOptimized(query: string, sources: string[]): Promise<Product[]> {
+async function runScrapersOptimized(
+  query: string,
+  sources: string[],
+  requestedLimit: number = 50
+): Promise<Product[]> {
   const allProducts: Product[] = [];
-  const limitPerSource = 7; // 🔥 각 플랫폼당 고정 7개씩
+  const limitPerSource = Math.max(requestedLimit, 20); // 🔥 요청된 limit 사용하되 최소 20개는 보장
 
   // 🔥 Strategy 1: 중고나라 우선 (Vercel에서 가장 안정적)
   const prioritizedSources = sources.sort((a, b) => {
@@ -101,7 +106,7 @@ async function runScrapersOptimized(query: string, sources: string[]): Promise<P
     switch (source) {
       case "danggeun":
         return runScraperWithTimeout(
-          DanggeunScraper,
+          DanggeunFastScraper, //check if this is working
           query,
           limitPerSource,
           SCRAPER_CONFIG.DANGGEUN_TIMEOUT,
@@ -109,39 +114,109 @@ async function runScrapersOptimized(query: string, sources: string[]): Promise<P
         ); // 당근마켓 전용 타임아웃
       case "bunjang":
         return runScraperWithTimeout(
-          BunjangScraper,
+          BunjangFastScraper,
           query,
           limitPerSource,
           SCRAPER_CONFIG.INDIVIDUAL_TIMEOUT,
           "번개장터"
-        ); // 번개장터
+        ); // 번개장터 (이제 Fast-Fetch!)
       case "junggonara":
         return runScraperWithTimeout(
-          JunggonaraScraper,
+          JunggonaraFastScraper,
           query,
           limitPerSource,
           SCRAPER_CONFIG.INDIVIDUAL_TIMEOUT,
           "중고나라"
-        ); // 중고나라 (가장 안정적)
+        ); // 중고나라 (이제 Fast-Fetch!)
       default:
         return Promise.resolve([]);
     }
   });
 
-  // 🔥 Strategy 3: Vercel 조기 성공 감지
+  // 🔥 Strategy 3: Vercel 조기 성공 감지 + 스마트 폴백
   if (SCRAPER_CONFIG.VERCEL_FAST_MODE) {
     console.log("🚀 Vercel 고속 모드: 첫 번째 성공 시 조기 응답 고려");
 
-    // 중고나라가 성공하면 다른 결과를 기다리지만, 전체 타임아웃 단축
+    // 🚀 Puppeteer 스킵 모드 - Bunjang이 느리면 다른 것들로만 응답
+    const isVercel = process.env.VERCEL === "1";
+    if (isVercel) {
+      // Fast scrapers만 빠르게 실행하고, Bunjang은 별도 처리
+      const fastScrapers = prioritizedSources.filter((source) => source !== "bunjang");
+      const bunjangIndex = prioritizedSources.indexOf("bunjang");
+
+      console.log("🚀 Vercel Fast-First 모드: 빠른 스크래퍼 우선 실행");
+
+      // Fast scrapers 먼저 실행 (당근마켓 + 중고나라)
+      const fastPromises = fastScrapers.map((source) => {
+        switch (source) {
+          case "danggeun":
+            return runScraperWithTimeout(
+              DanggeunFastScraper,
+              query,
+              limitPerSource,
+              10000,
+              "당근마켓"
+            );
+          case "junggonara":
+            return runScraperWithTimeout(
+              JunggonaraFastScraper,
+              query,
+              limitPerSource,
+              10000,
+              "중고나라"
+            );
+          default:
+            return Promise.resolve([]);
+        }
+      });
+
+      // Bunjang은 더 긴 타임아웃으로 별도 실행
+      const bunjangPromise =
+        bunjangIndex !== -1
+          ? runScraperWithTimeout(BunjangFastScraper, query, limitPerSource, 25000, "번개장터")
+          : Promise.resolve([]);
+
+      // 빠른 결과들을 먼저 기다림
+      const fastResults = await Promise.all(fastPromises);
+      const quickProducts = fastResults.flat();
+
+      console.log(`🚀 빠른 결과 확보: ${quickProducts.length}개 상품`);
+
+      // 충분한 결과가 있으면 Bunjang 결과를 기다리지만 타임아웃 설정
+      if (quickProducts.length >= Math.min(requestedLimit * 0.6, 20)) {
+        // 요청량의 60% 또는 최소 20개
+        const bunjangTimeout = new Promise<Product[]>((resolve) => {
+          setTimeout(() => {
+            console.log("⚡ Bunjang 타임아웃, 빠른 결과로 응답");
+            resolve([]);
+          }, 15000); // 8초 → 15초로 증가 (Bunjang의 navigation timeout과 맞춤)
+        });
+
+        console.log(`⏳ Bunjang 완료 대기 중... (최대 15초)`);
+        const bunjangResult = await Promise.race([bunjangPromise, bunjangTimeout]);
+        console.log(`✅ Bunjang 결과: ${bunjangResult.length}개 상품`);
+        const allResults = [...fastResults, bunjangResult];
+        const resultSources = [...fastScrapers, ...(bunjangIndex !== -1 ? ["bunjang"] : [])];
+        return processResults(allResults, resultSources, allProducts);
+      } else {
+        // 빠른 결과가 부족하면 Bunjang을 끝까지 기다림
+        console.log("🔄 빠른 결과 부족, Bunjang 완료 대기");
+        const bunjangResult = await bunjangPromise;
+        const allResults = [...fastResults, bunjangResult];
+        const resultSources = [...fastScrapers, ...(bunjangIndex !== -1 ? ["bunjang"] : [])];
+        return processResults(allResults, resultSources, allProducts);
+      }
+    }
+
+    // Non-Vercel environments: original logic
     const raceTimeout = new Promise<Product[][]>((resolve) => {
       setTimeout(() => {
         console.log("⚡ Vercel 고속 모드: 부분 결과로 응답");
-        resolve([]); // 빈 배열로 race 종료, Promise.all이 완료될 때까지 기다림
-      }, SCRAPER_CONFIG.TOTAL_TIMEOUT - 3000); // 전체보다 3초 일찍
+        resolve([]);
+      }, SCRAPER_CONFIG.TOTAL_TIMEOUT - 3000);
     });
 
     const results = await Promise.race([Promise.all(batchPromises), raceTimeout]);
-
     const batchResults =
       Array.isArray(results) && results.length > 0 ? results : await Promise.all(batchPromises);
     return processResults(batchResults, prioritizedSources, allProducts);
@@ -202,7 +277,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: SearchRequest = await request.json();
-    const { query, sources = ["danggeun", "bunjang", "junggonara"], limit = 10 } = body; // 🔥 당근마켓 다시 포함
+    const { query, sources = ["danggeun", "bunjang", "junggonara"], limit = 50 } = body; // 🔥 10개 → 50개 기본값
 
     if (!query?.trim()) {
       clearTimeout(globalTimeout);
@@ -214,7 +289,7 @@ export async function POST(request: NextRequest) {
     );
 
     // 🔥 최적화된 스크래핑 실행
-    const products = await runScrapersOptimized(query, sources);
+    const products = await runScrapersOptimized(query, sources, limit);
 
     clearTimeout(globalTimeout);
 
@@ -230,14 +305,16 @@ export async function POST(request: NextRequest) {
       요청된소스: sources,
     });
 
-    // 🔥 빠른 중복 제거 (간단한 URL 기반)
+    // 🔥 빠른 중복 제거 (간단한 URL 기반) - 모든 수집된 상품 표시
+    console.log(`🔍 중복 제거 전: ${products.length}개 상품, 요청 limit: ${limit}`);
     const uniqueProducts = products
       .filter(
         (product, index, self) =>
           index === self.findIndex((p) => p.productUrl === product.productUrl)
       )
-      .sort((a, b) => a.price - b.price)
-      .slice(0, limit);
+      .sort((a, b) => a.price - b.price);
+    // .slice(0, limit); // 🔥 제거: 모든 수집된 상품을 표시
+    console.log(`🔍 중복 제거 후: ${uniqueProducts.length}개 상품 (수집된 모든 상품 표시)`);
 
     // 🔥 최종 결과 검증 로깅
     const finalSourceBreakdown = uniqueProducts.reduce((acc, product) => {

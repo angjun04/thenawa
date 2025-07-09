@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ProductDetailScraper, ProductDetail } from "@/lib/scrapers/product-detail-scraper";
+import {
+  FastProductDetailScraper,
+  ProductDetail,
+} from "@/lib/scrapers/fast-product-detail-scraper";
 
 interface ComparisonRequest {
   products: Array<{
@@ -43,54 +46,10 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔄 제품 비교 시작: ${products.length}개 제품`);
 
-    const scraper = new ProductDetailScraper();
-    const detailedProducts: ProductDetail[] = [];
+    const scraper = new FastProductDetailScraper();
 
-    // Scrape detailed information for each product
-    for (const product of products) {
-      try {
-        console.log(`📦 상품 상세 정보 수집: ${product.title}`);
-        const detail = await scraper.scrapeProductDetail(product.productUrl, product.source);
-
-        if (
-          detail &&
-          detail.title &&
-          detail.title !== "제품명 정보 없음" &&
-          !detail.title.includes(product.source)
-        ) {
-          // Valid detail scraped - use it
-          detailedProducts.push(detail);
-        } else {
-          console.log(
-            `⚠️ 상세 정보 수집 실패 또는 부정확한 데이터, 원본 데이터 사용: ${product.title}`
-          );
-          // Fallback to original product info with enhanced data
-          detailedProducts.push({
-            ...product,
-            source: product.source as "danggeun" | "bunjang" | "junggonara" | "coupang",
-            description: product.title + " - " + product.source + "에서 판매 중인 상품입니다.",
-            condition: "상품 상태 정보 없음",
-            sellerName: "판매자",
-            additionalImages: [product.imageUrl].filter(Boolean),
-            specifications: {},
-            tags: [],
-          });
-        }
-      } catch (error) {
-        console.error(`❌ 상품 상세 정보 수집 실패: ${product.title}`, error);
-        // Use original product info as fallback
-        detailedProducts.push({
-          ...product,
-          source: product.source as "danggeun" | "bunjang" | "junggonara" | "coupang",
-          description: product.title + " - " + product.source + "에서 판매 중인 상품입니다.",
-          condition: "상품 상태 정보 없음",
-          sellerName: "판매자",
-          additionalImages: [product.imageUrl].filter(Boolean),
-          specifications: {},
-          tags: [],
-        });
-      }
-    }
+    // Use fast parallel processing instead of sequential
+    const detailedProducts = await scraper.scrapeProductsDetails(products);
 
     console.log(`✅ 상품 상세 정보 수집 완료: ${detailedProducts.length}개`);
 
@@ -115,68 +74,54 @@ async function generateComparison(products: ProductDetail[]): Promise<Comparison
   try {
     console.log("🤖 AI 비교 분석 시작...");
 
-    const prompt = `당신은 한국의 중고거래 전문가입니다. 다음 제품들을 종합적으로 비교 분석해주세요.
+    // 🔥 최적화된 간결한 프롬프트 (처리 속도 향상)
+    const prompt = `중고거래 전문가로서 다음 ${products.length}개 제품을 상세히 비교 분석해주세요.
 
-제품 정보:
+제품들:
 ${products
   .map(
     (product, index) => `
-제품 ${index + 1} (ID: ${product.id}):
-- 제목: ${product.title}
-- 가격: ${product.priceText} (${product.price}원)
-- 플랫폼: ${product.source}
-- 판매자: ${product.sellerName}
-- 상품 상태: ${product.condition}
-- 상세 설명: ${product.description}
-- 사양: ${JSON.stringify(product.specifications)}
-- 위치: ${product.location || "정보 없음"}
-`
+${index + 1}. ${product.title} - ${product.priceText}
+   플랫폼: ${product.source} | 판매자: ${product.sellerName}
+   전체 설명: ${product.description}`
   )
   .join("\n")}
 
-**분석 요구사항:**
-1. 각 카테고리별로 구체적이고 상세한 비교 분석을 제공하세요
-2. 실제 제품 정보를 바탕으로 정확한 분석을 하세요
-3. 가격, 상태, 사양을 구체적으로 비교하세요
-4. 실용적이고 도움이 되는 조언을 제공하세요
-5. **중요**: 각 제품의 장점(pros)과 단점(cons)은 실제 제품명, 가격, 설명을 분석하여 구체적으로 생성하세요
+**중요 분석 지침**:
+- 제목과 설명을 자세히 읽고 실제 상태를 추출하세요 (배터리%, 하자유무, 사용감, 보증상태 등)
+- "상태 정보 없음"이라고 표시된 경우에도 설명에서 상태를 유추하세요
+- 판매자의 신뢰도와 거래방식을 분석하세요
+- 실제 사양과 가격 대비 가치를 평가하세요
 
-**중요: 응답은 반드시 아래 JSON 형식으로만 해주세요. 각 필드는 구체적이고 실제적인 내용으로 채워주세요.**
+아래 JSON 형식으로만 응답해주세요 (다른 텍스트 없이):
 
 {
   "comparison": {
-    "가격": "실제 가격을 비교하고 가성비를 분석해주세요",
-    "상태": "각 제품의 상태를 구체적으로 비교해주세요", 
-    "판매자": "판매자와 플랫폼의 신뢰도를 분석해주세요",
-    "사양": "제품 사양과 기능을 상세히 비교해주세요",
-    "위치": "거래 위치와 편의성을 비교해주세요"
+    "가격": "가격 비교 요약",
+    "상태": "제목/설명에서 분석한 실제 상태 정보",
+    "판매자": "플랫폼별 신뢰도와 판매자 특징",
+    "사양": "사양 비교 요약",
+    "위치": "거래 편의성 비교"
   },
   "products": [
     {
-      "id": "실제_제품_ID",
-      "valueRating": 1-10,
-      "pros": ["제품명/가격/설명을 기반으로 한 구체적 장점들"],
-      "cons": ["제품명/가격/설명을 기반으로 한 구체적 단점들"], 
-      "conditionScore": 1-10,
-      "priceScore": 1-10
+      "id": "${products[0].id}",
+      "valueRating": 7,
+      "pros": ["실제 장점 (상태, 가격, 사양 기반)"],
+      "cons": ["실제 단점 (상태, 가격, 문제점)"], 
+      "conditionScore": 7,
+      "priceScore": 8,
+      "extractedCondition": "제목과 설명에서 추출한 구체적 상태 (예: 배터리 77%, 하자없음, 상급 등)",
+      "extractedSellerInfo": "판매자 특징이나 신뢰도 정보"
     }
   ],
   "bestValue": {
-    "productId": "가장_추천하는_제품_ID",
-    "reason": "구체적이고 상세한 추천 이유"
+    "productId": "추천_제품_ID",
+    "reason": "상태, 가격, 신뢰도 기반 추천 이유"
   },
-  "recommendations": "실용적인 구매 가이드와 주의사항",
-  "summary": "전체 비교 분석의 핵심 요약"
-}
-
-**필수 지침:**
-- 실제 제품 정보를 기반으로 분석하세요
-- 플레이스홀더나 예시 텍스트를 사용하지 마세요  
-- 각 제품의 실제 ID를 사용하세요
-- 구체적이고 실용적인 조언을 제공하세요
-- **pros/cons는 제품명, 가격, 설명 내용을 구체적으로 분석하여 생성하세요**
-- 예: "아이폰 13" → pros: ["최신 iOS 지원", "A15 바이오닉 칩 성능"], cons: ["배터리 교체 이력 불분명", "높은 가격대"]
-- JSON 형식만 응답하고 다른 텍스트는 포함하지 마세요`;
+  "recommendations": "구매 가이드 (상태와 신뢰도 고려)",
+  "summary": "핵심 요약 (실제 상태와 판매자 정보 포함)"
+}`;
 
     // Debug API key length for security
     const apiKeyLength = process.env.OPENROUTER_API_KEY?.length || 0;
@@ -187,16 +132,15 @@ ${products
       messages: [
         {
           role: "system",
-          content:
-            "당신은 한국 중고거래 전문가입니다. 정확하고 유용한 제품 비교 분석을 제공합니다. 응답은 반드시 유효한 JSON 형식으로만 해주세요. 다른 형식의 텍스트는 절대 포함하지 마세요.",
+          content: "한국 중고거래 전문가. JSON 형식으로만 응답.",
         },
         {
           role: "user",
           content: prompt,
         },
       ],
-      temperature: 0.7,
-      max_tokens: 2000,
+      temperature: 0.3,
+      max_tokens: 1200,
     };
 
     console.log(`🚀 OpenRouter 요청:`, {
@@ -206,6 +150,8 @@ ${products
       promptLength: prompt.length,
     });
 
+    // 🔥 AI 요청에 타임아웃 추가 (10초)
+    const aiStartTime = Date.now();
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -215,9 +161,11 @@ ${products
         "X-Title": "TheNawa Product Comparison",
       },
       body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(15000), // 15초 타임아웃
     });
 
-    console.log(`📡 OpenRouter 응답 상태: ${response.status}`);
+    const aiRequestTime = Date.now() - aiStartTime;
+    console.log(`📡 OpenRouter 응답 상태: ${response.status} (${aiRequestTime}ms)`);
 
     if (!response.ok) {
       const errorText = await response.text();
