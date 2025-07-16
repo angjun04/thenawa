@@ -20,6 +20,7 @@ async function autoScroll(page) {
   });
 }
 
+
 export default class DanggeunScraper {
   /**
    * @param {import('puppeteer').Browser} browser shared Puppeteer instance

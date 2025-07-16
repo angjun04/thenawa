@@ -293,6 +293,42 @@ export class DanggeunFastScraper extends BaseScraper {
       const products: Product[] = [];
       const selector = 'a[data-gtm="search_article"]';
 
+      // Debug: Check what elements are found
+      const foundElements = $(selector);
+      console.log(`🎯 당근마켓 Fast 선택자 결과: ${foundElements.length}개 요소 (${selector})`);
+
+      if (foundElements.length === 0) {
+        console.log(`❌ 당근마켓 Fast: 선택자로 요소를 찾을 수 없음`);
+        console.log(`🔍 페이지 전체 링크 확인 (처음 10개):`);
+        $("a")
+          .slice(0, 10)
+          .each((i, el) => {
+            const href = $(el).attr("href");
+            const dataGtm = $(el).attr("data-gtm");
+            const text = $(el).text().trim().substring(0, 50);
+            console.log(`  ${i}: href="${href}" data-gtm="${dataGtm}" text="${text}"`);
+          });
+        return [];
+      }
+
+      // Show sample element structure
+      if (foundElements.length > 0) {
+        const firstElement = foundElements.first();
+        console.log(`🔍 첫 번째 요소 구조 분석:`);
+        console.log(`  - href: "${firstElement.attr("href")}"`);
+        console.log(`  - 전체 텍스트: "${firstElement.text().trim().substring(0, 100)}..."`);
+        console.log(`  - span 태그 수: ${firstElement.find("span").length}`);
+        console.log(`  - img 태그 수: ${firstElement.find("img").length}`);
+
+        // Check if specific classes exist
+        const hasTitle = firstElement.find("span.lm809sh").length;
+        const hasPrice = firstElement.find("span.lm809si").length;
+        const hasLocation = firstElement.find("span.lm809sj").length;
+        console.log(`  - 제목 클래스 (lm809sh): ${hasTitle}개`);
+        console.log(`  - 가격 클래스 (lm809si): ${hasPrice}개`);
+        console.log(`  - 위치 클래스 (lm809sj): ${hasLocation}개`);
+      }
+
       $(selector).each((i, el) => {
         if (i >= limit) return false;
 
@@ -301,6 +337,14 @@ export class DanggeunFastScraper extends BaseScraper {
         const priceTxt = card.find("span.lm809si").text().trim();
         const price = parseInt(priceTxt.replace(/[^0-9]/g, ""), 10) || 0;
         const location = card.find("span.lm809sj").first().text().trim();
+
+        // Debug logging for each element
+        console.log(`🔍 당근마켓 Fast 파싱 [${i}]:`);
+        console.log(`  - 원본 카드 텍스트: "${card.text().trim().substring(0, 100)}..."`);
+        console.log(`  - 제목 (span.lm809sh): "${title}"`);
+        console.log(`  - 가격 (span.lm809si): "${priceTxt}"`);
+        console.log(`  - 위치 (span.lm809sj): "${location}"`);
+        console.log(`  - href: "${card.attr("href")}"`);
 
         // Enhanced image extraction
         let img = "";
@@ -343,6 +387,10 @@ export class DanggeunFastScraper extends BaseScraper {
         const relUrl = card.attr("href");
         const productUrl = this.baseUrl + relUrl;
 
+        console.log(`🔍 당근마켓 Fast 검증 [${i}]:`);
+        console.log(`  - 제목 검증: ${title ? "✅" : "❌"} "${title}"`);
+        console.log(`  - URL 검증: ${productUrl ? "✅" : "❌"} "${productUrl}"`);
+
         if (title && productUrl) {
           const product: Product = {
             id: `danggeun-${i}-${Date.now()}`,
@@ -364,6 +412,8 @@ export class DanggeunFastScraper extends BaseScraper {
               img ? "있음" : "없음"
             })`
           );
+        } else {
+          console.log(`❌ 당근마켓 상품 검증 실패 [${i}]: 제목 또는 URL 누락`);
         }
       });
 

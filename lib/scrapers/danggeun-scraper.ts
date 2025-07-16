@@ -142,35 +142,56 @@ export class DanggeunScraper extends BaseScraper {
 
           // Use different parsing logic based on the selector used
           if (usedSelector === 'a[data-gtm="search_article"]') {
-            // Original working parsing logic for data-gtm selector
-            title = card.find("span").first().text().trim(); // Try first span for title
+            // Updated parsing logic using specific CSS classes (from working fast scraper)
+            title = card.find("span.lm809sh").text().trim(); // Specific title class
             if (!title) {
-              title = card.text().split("\n")[0].trim(); // Fallback to first line
+              // Fallback to generic approach
+              title = card.text().split("\n")[0].trim();
             }
 
-            // Look for price in spans or text
-            const spans = card.find("span");
-            spans.each((i, span) => {
-              const spanText = $(span).text().trim();
-              if (/\d+[,.]?\d*원/.test(spanText)) {
-                priceTxt = spanText;
-                return false; // Break from each loop
-              }
-            });
+            // Look for price using specific class
+            priceTxt = card.find("span.lm809si").text().trim();
+            if (!priceTxt) {
+              // Fallback: Look for price in spans or text
+              const spans = card.find("span");
+              spans.each((i, span) => {
+                const spanText = $(span).text().trim();
+                if (/\d+[,.]?\d*원/.test(spanText)) {
+                  priceTxt = spanText;
+                  return false; // Break from each loop
+                }
+              });
+            }
 
-            // Look for location
-            spans.each((i, span) => {
-              const spanText = $(span).text().trim();
-              if (
-                spanText &&
-                spanText !== title &&
-                spanText !== priceTxt &&
-                !spanText.includes("·")
-              ) {
-                location = spanText;
-                return false;
-              }
-            });
+            // Look for location using specific class
+            location = card.find("span.lm809sj").first().text().trim();
+            if (!location) {
+              // Fallback: Look for location in spans
+              const spans = card.find("span");
+              spans.each((i, span) => {
+                const spanText = $(span).text().trim();
+                if (
+                  spanText &&
+                  spanText !== title &&
+                  spanText !== priceTxt &&
+                  !spanText.includes("·")
+                ) {
+                  location = spanText;
+                  return false;
+                }
+              });
+            }
+
+            // Ensure location fallback
+            if (!location || location === "") {
+              location = "당근마켓";
+            }
+
+            // Debug logging to understand what's being extracted
+            console.log(`🔍 당근마켓 파싱 결과 [${index}]:`);
+            console.log(`  - 제목: "${title}"`);
+            console.log(`  - 가격: "${priceTxt}"`);
+            console.log(`  - 위치: "${location}"`);
           } else {
             // Alternative parsing for href-based selectors
             const fullText = card.text().trim();
@@ -274,6 +295,12 @@ export class DanggeunScraper extends BaseScraper {
               console.log(`⚡ 당근마켓 조기 종료: ${products.length}개 수집 완료`);
               break;
             }
+          } else {
+            // Debug: Log why the product was rejected
+            console.log(`❌ 당근마켓 상품 검증 실패 [${index}]:`);
+            console.log(`  - 제목: ${title ? "✅" : "❌"} "${title}"`);
+            console.log(`  - URL: ${productUrl ? "✅" : "❌"} "${productUrl}"`);
+            console.log(`  - relUrl: "${relUrl}"`);
           }
         } catch (error) {
           console.error(`❌ 당근마켓 상품 파싱 오류:`, error);
