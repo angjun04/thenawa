@@ -333,17 +333,63 @@ export class DanggeunFastScraper extends BaseScraper {
         if (i >= limit) return false;
 
         const card = $(el);
-        const title = card.find("span.lm809sh").text().trim();
-        const priceTxt = card.find("span.lm809si").text().trim();
-        const price = parseInt(priceTxt.replace(/[^0-9]/g, ""), 10) || 0;
-        const location = card.find("span.lm809sj").first().text().trim();
+        let title = "";
+        let priceTxt = "";
+        let price = 0;
+        let location = "";
+
+        // Get the raw text content
+        const rawText = card.text().trim();
 
         // Debug logging for each element
         console.log(`🔍 당근마켓 Fast 파싱 [${i}]:`);
-        console.log(`  - 원본 카드 텍스트: "${card.text().trim().substring(0, 100)}..."`);
-        console.log(`  - 제목 (span.lm809sh): "${title}"`);
-        console.log(`  - 가격 (span.lm809si): "${priceTxt}"`);
-        console.log(`  - 위치 (span.lm809sj): "${location}"`);
+        console.log(`  - 원본 카드 텍스트: "${rawText.substring(0, 100)}..."`);
+
+        // Since CSS classes have changed, extract from raw text using patterns
+        // Pattern: "제목가격원위치·시간" like "아이폰6s 32GB 배터리100160,000원마장동·22시간 전"
+
+        // Extract price first (more reliable pattern)
+        const priceMatch = rawText.match(/(\d{1,3}(?:,\d{3})*원)/);
+        if (priceMatch) {
+          priceTxt = priceMatch[1];
+          price = parseInt(priceTxt.replace(/[^0-9]/g, "")) || 0;
+        }
+
+        // Extract location (text before ·)
+        const locationMatch = rawText.match(/([가-힣]+)·/);
+        if (locationMatch) {
+          location = locationMatch[1];
+        }
+
+        // Extract title (text before price, clean it up)
+        if (priceTxt) {
+          const titlePart = rawText.split(priceTxt)[0];
+          // Remove status prefixes like "예약중", "판매완료" etc.
+          title = titlePart.replace(/^(예약중|판매완료|거래완료|판매중)/, "").trim();
+        } else {
+          // Fallback: use text before location
+          if (location) {
+            title = rawText.split(location)[0].trim();
+          } else {
+            // Last fallback: use first part of text
+            title = rawText
+              .split(/\d+원/)[0]
+              .replace(/^(예약중|판매완료|거래완료|판매중)/, "")
+              .trim();
+          }
+        }
+
+        // Clean up title - remove numbers at the end that might be prices
+        title = title.replace(/\d+원?$/, "").trim();
+
+        // Fallback values
+        if (!priceTxt) priceTxt = "가격 문의";
+        if (!location) location = "당근마켓";
+        if (!title) title = rawText.substring(0, 50).trim();
+
+        console.log(`  - 추출된 제목: "${title}"`);
+        console.log(`  - 추출된 가격: "${priceTxt}"`);
+        console.log(`  - 추출된 위치: "${location}"`);
         console.log(`  - href: "${card.attr("href")}"`);
 
         // Enhanced image extraction
@@ -391,7 +437,7 @@ export class DanggeunFastScraper extends BaseScraper {
         console.log(`  - 제목 검증: ${title ? "✅" : "❌"} "${title}"`);
         console.log(`  - URL 검증: ${productUrl ? "✅" : "❌"} "${productUrl}"`);
 
-        if (title && productUrl) {
+        if (title && productUrl && title.length > 2) {
           const product: Product = {
             id: `danggeun-${i}-${Date.now()}`,
             title,
@@ -408,7 +454,7 @@ export class DanggeunFastScraper extends BaseScraper {
           products.push(product);
 
           console.log(
-            `✅ 당근마켓 상품 추가 [${i}]: ${title}${priceTxt}${location} - ${price.toLocaleString()}원 (이미지: ${
+            `✅ 당근마켓 상품 추가 [${i}]: ${title} - ${priceTxt} (${location}) - ${price.toLocaleString()}원 (이미지: ${
               img ? "있음" : "없음"
             })`
           );
